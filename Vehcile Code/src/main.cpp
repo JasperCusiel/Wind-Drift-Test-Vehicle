@@ -3,20 +3,49 @@
 #include "pico/stdlib.h"
 #include "Arduino.h"
 
+// RP2040 Board
+int SDA = 6;
+int SCL = 7;
+
 // Soft Power Switch 
 int POWER_BUTTON = 4;
 int FAST_OFF = 5;
 long powerPressedStartTime = 0;
 int debounceDelay = 20;
+
 // Status LED
 int LED_RED = 4;
 int LED_BLUE = 4;
 int LED_GREEN = 4;
+
 // MS5637 Altimeter
 MS5637 barometricSensor;
+
 // GPS
+int SPI_CLK = 2;
+int MOSI = 3;
+int MISO = 4;
+int GPS_CS = 5;
+int TX = 0;
+int RX = 1;
+int RST = 13;
+int PWM = 16;
+int INT = 17;
+int AN = 26;
 
 // LoRa 
+int RADIO_FREQ_MHZ = 915;
+int RFM_CS = 1;
+int RFM_RST = 1;
+int RFM_IQR = 1;
+
+// Micro SD Card
+int SDO = 12;
+int SDI = 15;
+int CLK = 14;
+int DATA_1 = 11;
+int DATA_2 = 10;
+int DATA_3 = 9;
 
 
 void setup(void) {
@@ -49,8 +78,8 @@ void setup(void) {
   Serial.println("Begin");
   
   //I2C Start
-  Wire1.setSDA(6);
-  Wire1.setSCL(7);
+  Wire1.setSDA(SDA);
+  Wire1.setSCL(SCL);
   Wire1.begin();
   barometricSensor.begin(Wire1);
   
