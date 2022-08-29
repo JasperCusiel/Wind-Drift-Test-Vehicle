@@ -2,10 +2,17 @@
 #include "SparkFun_MS5637_Arduino_Library.h"
 #include "pico/stdlib.h"
 #include "Arduino.h"
+#include <SparkFun_MAX1704x_Fuel_Gauge_Arduino_Library.h>
 
 // RP2040 Board
 int SDA = 6;
 int SCL = 7;
+
+// MAX17048 Battery Fuel Gauge
+SFE_MAX1704X lipo(MAX1704X_MAX17048); 
+double voltage = 0;
+double soc = 0;
+bool alert;
 
 // Soft Power Switch 
 int POWER_BUTTON = 4;
@@ -68,7 +75,6 @@ void setup(void) {
   // Display Red LED to indiacate system is on and not data logging
   pinMode(LED_RED, OUTPUT);
   digitalWrite(LED_RED, HIGH);
-
   powerPressedStartTime = 0; //Reset var to return to normal 'on' state
 
   //Turn on 
@@ -82,10 +88,16 @@ void setup(void) {
   Wire1.setSCL(SCL);
   Wire1.begin();
   barometricSensor.begin(Wire1);
-  
 
-
-
+  // MAX17048 Battery Fuel Gauge start
+  if (lipo.begin() == false) // Connect to the MAX17043 using non-standard wire port
+  {
+    Serial.println(F("MAX17048 not detected. Please check wiring. Freezing."));
+    while (1)
+      ;
+  }
+  lipo.quickStart();
+  lipo.setThreshold(20);
 }
 
 void loop(void) {
