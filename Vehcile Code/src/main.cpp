@@ -3,6 +3,8 @@
 #include "pico/stdlib.h"
 #include "Arduino.h"
 #include <SparkFun_MAX1704x_Fuel_Gauge_Arduino_Library.h>
+#include <LoRa.h>
+#include <SPI.h>
 
 // RP2040 Board
 int SDA = 6;
@@ -41,10 +43,15 @@ int INT = 17;
 int AN = 26;
 
 // LoRa 
-int RADIO_FREQ_MHZ = 915;
-int RFM_CS = 1;
-int RFM_RST = 1;
-int RFM_IQR = 1;
+const int RADIO_FREQ_MHZ = 915;
+const int RFM_CS = 1;
+const int RFM_RST = 1;
+const int RFM_IQR = 1;
+byte localAddress = 0xAA;
+byte destinationAddress = 0xBB;
+int count = 0;
+long lastSendTime = 0;
+int interval = 200;
 
 // Micro SD Card
 int SDO = 12;
@@ -82,13 +89,21 @@ void setup(void) {
   //Serial Initialization
   Serial.begin(9600);
   Serial.println("Begin");
-  
-  //I2C Start
+
+  //I2C Initialization
   Wire1.setSDA(SDA);
   Wire1.setSCL(SCL);
   Wire1.begin();
   barometricSensor.begin(Wire1);
 
+  // LoRa Initialization
+  LoRa.setPins(RFM_CS, RFM_RST, RFM_IQR);
+  if (!LoRa.begin(RADIO_FREQ_MHZ))
+  {
+    Serial.println("LoRa init failed, check connections.");
+    while (1){}
+  }
+  
   // MAX17048 Battery Fuel Gauge start
   if (lipo.begin() == false) // Connect to the MAX17043 using non-standard wire port
   {
@@ -101,11 +116,9 @@ void setup(void) {
 }
 
 void loop(void) {
-  
+  // Check sensor data
   if (barometricSensor.isConnected())
   {
-    Serial.print("Good");
-
     float temperature = barometricSensor.getTemperature();
     float pressure = barometricSensor.getPressure();
 
@@ -123,7 +136,20 @@ void loop(void) {
   {
     Serial.println("Not connected");
   }
-  delay(50);
+  // Send data via LoRa
+  if (millis() - lastSendTime > interval)
+  {
+    String sensorData = String(count++);
+    sendMessage(sensorData);
+    Serial.print("Sending data " + sensorData);
+    Serial.print(" from 0x" + String(localAddress, HEX));
+    Serial.print(" to 0x" + String(destinationAddress, HEX));
+    lastSendTime = millis();
+    interval = random(2000) + 1000;
+  }
+
+
+
 }
 
 void fastPowerDown()
@@ -137,4 +163,45 @@ void fastPowerDown()
   {
     delay(1);
   }
+}
+
+void sendMessage(String outgoing)
+{
+  LoRa.beginPacket();
+  LoRa.write(destinationAddress);
+  LoRa.write(localAddress);
+  LoRa.write(outgoing.length());
+  LoRa.print(outgoing);
+  LoRa.endPacket();
+}
+
+void receiveMessage(int packetSize)
+{
+  if (packetSize == 0) return;
+  int recipient = LoRa.read();
+  byte sender = LoRa.read();
+  byte incomingLength = LoRa.read();
+
+  String incoming = "";
+
+  while (LoRa.available())
+  {
+    incoming += (char)LoRa.read();
+  }
+  // Error checking
+  if (incomingLength != incoming.length())
+  {
+    Serial.println("Error: Message length does not match length");
+    return;
+  }
+
+  if (recipient != localAddress)
+  {
+    Serial.println("Error: Recipient adress does not match local address");
+    return;
+  }
+  
+  Serial.print("Received data" + incoming);
+  Serial.print(" from 0x" + String(sender, HEX));
+  Serial.println(" to 0x" + String(recipient, HEX));
 }
