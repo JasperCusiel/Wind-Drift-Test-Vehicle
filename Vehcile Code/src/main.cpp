@@ -1,10 +1,13 @@
 #include <Wire.h>
-#include "SparkFun_MS5637_Arduino_Library.h"
+#include <SparkFun_MS5637_Arduino_Library.h>
 #include "pico/stdlib.h"
 #include "Arduino.h"
 #include <SparkFun_MAX1704x_Fuel_Gauge_Arduino_Library.h>
 #include <LoRa.h>
 #include <SPI.h>
+
+//Uncomment to turn on debugging
+#define DEBUGGING
 
 // RP2040 Board
 int Board_SDA = 6;
@@ -17,8 +20,8 @@ double soc = 0;
 bool alert;
 
 // Soft Power Switch 
-int POWER_BUTTON = 4;
-int FAST_OFF = 5;
+int POWER_BUTTON = 17;
+int FAST_OFF = 16;
 long powerPressedStartTime = 0;
 int debounceDelay = 20;
 
@@ -80,7 +83,9 @@ void slowPowerDown()
   pinMode(POWER_BUTTON, OUTPUT);
   digitalWrite(POWER_BUTTON, LOW);
   powerPressedStartTime = millis();
-  Serial.print("Pulling power line low");
+  #ifdef DEBUGGING
+    Serial.print("Pulling power line low");
+  #endif
   while (1)
   {
     delay(1);
@@ -120,30 +125,39 @@ void receiveMessage(int packetSize)
 
   if (incomingLength != incoming.length())    // check length for error
   {
-    Serial.println("Error: Message length does not match length");
+    #ifdef DEBUGGING
+      Serial.println("Error: Message length does not match length");
+    #endif
+
     return;
   }
 
   if (recipient != localAddress)              // check message is for this device
   {
-    Serial.println("Error: Recipient adress does not match local address");
+    #ifdef DEBUGGING
+      Serial.println("Error: Recipient adress does not match local address");
+    #endif
+  
     return;
   }
   
   // if message is for this device, or broadcast, print details:
-  Serial.println("Received from: 0x" + String(sender, HEX));
-  Serial.println("Sent to: 0x" + String(recipient, HEX));
-  Serial.println("Message ID: " + String(incomingMsgId));
-  Serial.println("Message length: " + String(incomingLength));
-  Serial.println("Message: " + incoming);
-  Serial.println("RSSI: " + String(LoRa.packetRssi()));
-  Serial.println("Snr: " + String(LoRa.packetSnr()));
-  Serial.println();
+  #ifdef DEBUGGING
+    Serial.println("Received from: 0x" + String(sender, HEX));
+    Serial.println("Sent to: 0x" + String(recipient, HEX));
+    Serial.println("Message ID: " + String(incomingMsgId));
+    Serial.println("Message length: " + String(incomingLength));
+    Serial.println("Message: " + incoming);
+    Serial.println("RSSI: " + String(LoRa.packetRssi()));
+    Serial.println("Snr: " + String(LoRa.packetSnr()));
+    Serial.println();
+  #endif
 }
 
 void setup(void) {
   //Power Switch Input Setup
   pinMode(POWER_BUTTON, INPUT_PULLUP);
+  pinMode(FAST_OFF, INPUT_PULLUP);
   powerPressedStartTime = millis();
   while (digitalRead(POWER_BUTTON) == LOW)
   {
@@ -166,8 +180,10 @@ void setup(void) {
   //Turn on 
 
   //Serial Initialization
-  Serial.begin(9600);
-  Serial.println("Begin");
+  #ifdef DEBUGGING
+    Serial.begin(9600);
+    Serial.println("Begin");
+  #endif
 
   //I2C Initialization
   Wire1.setSDA(Board_SDA);
@@ -178,17 +194,22 @@ void setup(void) {
   // LoRa Initialization
   LoRa.setPins(RFM_CS, RFM_RST, RFM_IQR);
   if (!LoRa.begin(915E6))
-  {
-    Serial.println("LoRa init failed, check connections.");
+  { 
+    #ifdef DEBUGGING
+      Serial.println("LoRa init failed, check connections.");
+    #endif
+
     while (1){}
   }
   
   // MAX17048 Battery Fuel Gauge start
   if (lipo.begin() == false) // Connect to the MAX17043 using non-standard wire port
   {
-    Serial.println(F("MAX17048 not detected. Please check wiring. Freezing."));
-    while (1)
-      ;
+    #ifdef DEBUGGING
+      Serial.println(F("MAX17048 not detected. Please check wiring. Freezing."));
+    #endif
+
+    while (1);
   }
   lipo.quickStart();
   lipo.setThreshold(20);
@@ -203,7 +224,10 @@ void loop(void) {
       delay(debounceDelay);
       if (digitalRead(POWER_BUTTON) == LOW)
       {
-        Serial.println("User is pressing power button. Start timer.");
+        #ifdef DEBUGGING
+          Serial.println("User is pressing power button. Start timer.");
+        #endif
+
         powerPressedStartTime = millis();
       }
     }
@@ -215,7 +239,9 @@ void loop(void) {
       {
         if ((millis() - powerPressedStartTime) > 2000)
         {
-          Serial.println("Time to power down!");
+          #ifdef DEBUGGING
+            Serial.println("Time to power down!");
+          #endif
           fastPowerDown();
         }
       }
@@ -226,41 +252,46 @@ void loop(void) {
       delay(debounceDelay);
       if (digitalRead(POWER_BUTTON) == HIGH)
       {
-        Serial.print("Power button released after ms: ");
-        Serial.println(millis() - powerPressedStartTime);
+        #ifdef DEBUGGING
+          Serial.print("Power button released after ms: ");
+          Serial.println(millis() - powerPressedStartTime);
+        #endif
       }
       powerPressedStartTime = 0; //Reset var to return to normal 'on' state
     }
   }
   
   // Check sensor data
-  if (barometricSensor.isConnected())
+  if (!barometricSensor.isConnected())
   {
-    float temperature = barometricSensor.getTemperature();
-    float pressure = barometricSensor.getPressure();
+    #ifdef DEBUGGING
+      Serial.println("Barometric Pressure Sensor Not connected");
+    #endif
+  }
+  float temperature = barometricSensor.getTemperature();
+  float pressure = barometricSensor.getPressure();
 
+  #ifdef DEBUGGING
     Serial.print(" Temp=");
     Serial.print(temperature, 1);
     Serial.print("(C)");
-
     Serial.print(" Press=");
     Serial.print(pressure, 3);
     Serial.print("(hPa)");
-
     Serial.println();
-  }
-  else
-  {
-    Serial.println("Not connected");
-  }
+  #endif
+
   // Send data via LoRa
   if (millis() - lastSendTime > interval)
   {
     String sensorData = String(count++);
     sendMessage(sensorData);
-    Serial.print("Sending data " + sensorData);
-    Serial.print(" from 0x" + String(localAddress, HEX));
-    Serial.print(" to 0x" + String(destinationAddress, HEX));
+    #ifdef DEBUGGING
+      Serial.print("Sending data " + sensorData);
+      Serial.print(" from 0x" + String(localAddress, HEX));
+      Serial.print(" to 0x" + String(destinationAddress, HEX));
+    #endif
+
     lastSendTime = millis();
     interval = random(2000) + 1000;
   }
