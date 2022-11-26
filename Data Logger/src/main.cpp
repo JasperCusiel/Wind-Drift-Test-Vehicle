@@ -18,27 +18,27 @@ TFT_eSprite needleHundredth = TFT_eSprite(&tft);     // create thousandth needle
 void createAltimeterBackground()
 {
     altimeterBackground.setColorDepth(8);
-    altimeterBackground.createSprite(114, 114);
-    altimeterBackground.setPivot(57, 57);
+    altimeterBackground.createSprite(104, 104);
+    altimeterBackground.setPivot(52, 52);
     altimeterBackground.fillSprite(TFT_TRANSPARENT);
-    altimeterBackground.pushImage(0, 0, 114, 114, altimeterBackgroundImg);
+    altimeterBackground.pushImage(0, 0, 104, 104, altimeterBackgroundImg);
 }
 
 void createNeedleHundredth()
 {
     needleHundredth.setColorDepth(8);
-    needleHundredth.createSprite(8, 60);
+    needleHundredth.createSprite(8, 64);
     needleHundredth.fillSprite(TFT_TRANSPARENT);
-    needleHundredth.pushImage(0, 0, 8, 60, altHandHundredths);
-    needleHundredth.setPivot(4, 40);
+    needleHundredth.pushImage(0, 0, 8, 64, altHandHundredths);
+    needleHundredth.setPivot(4, 42);
 }
 
 void createNeedleThousandth()
 {
     needleThousandth.setColorDepth(8);
-    needleThousandth.createSprite(12, 46);
+    needleThousandth.createSprite(12, 44);
     needleThousandth.fillSprite(TFT_TRANSPARENT);
-    needleThousandth.pushImage(0, 0, 12, 46, altHandThousandths);
+    needleThousandth.pushImage(0, 0, 12, 44, altHandThousandths);
     needleThousandth.setPivot(6, 30);
 }
 
@@ -47,12 +47,12 @@ void drawAltimeter(int thousandthsAngle, int hundredthsAngle)
     createAltimeterBackground();
     needleThousandth.pushRotated(&altimeterBackground, thousandthsAngle, TFT_TRANSPARENT);
     needleHundredth.pushRotated(&altimeterBackground, hundredthsAngle, TFT_TRANSPARENT);
-    altimeterBackground.pushSprite(0, 14, TFT_TRANSPARENT);
+    altimeterBackground.pushSprite(0, 24, TFT_TRANSPARENT);
 }
 
 void drawAltitude(int altitudeVal)
 {
-    tft.drawString(String(altitudeVal), 114, 0, 4);
+    tft.drawString(String(altitudeVal), 104, 0, 14);
 }
 
 void setup()
