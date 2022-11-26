@@ -9,6 +9,8 @@ const int upButtonPin = 2;
 const int downButtonPin = 3;
 const int leftButtonPin = 4;
 const int rightButtonPin = 5;
+int rssi = 0;
+float batteryPercentage = 100.0;
 
 TFT_eSPI tft = TFT_eSPI(128, 160);                   /* TFT instance */
 TFT_eSprite altimeterBackground = TFT_eSprite(&tft); // create altimeter background sprite
@@ -51,22 +53,45 @@ void drawAltimeter(int thousandthsAngle, int hundredthsAngle)
     altimeterBackground.pushSprite(0, 24, TFT_TRANSPARENT);
 }
 
-void drawStatusBar(bool connected, float percentage)
+void drawStatusBar(bool connected, float percentage, int rssi)
 {
     statusBar.setColorDepth(8);
-    statusBar.createSprite(160, 24, TFT_TRANSPARENT);
-    statusBar.fillSprite(TFT_TRANSPARENT);
+    statusBar.createSprite(160, 20, TFT_TRANSPARENT);
+    statusBar.fillSprite(TFT_BLACK);
+
+    // draw RSSI
+    const int sigX = 140;
+    const int sigY = 3;
+    int strength = map(rssi, -120, 0, 0, 4);
+    if (strength >= 3)
+    {
+        statusBar.fillSmoothRoundRect(sigX, sigY, 2, 12, 1, TFT_WHITE);
+    }
+    if (strength >= 2)
+    {
+        statusBar.fillSmoothRoundRect((sigX + 4), (sigY + 2), 2, 10, 1, TFT_WHITE);
+    }
+    if (strength >= 1)
+    {
+        statusBar.fillSmoothRoundRect((sigX + 8), (sigY + 4), 2, 8, 1, TFT_WHITE);
+    }
+    if (strength >= 0)
+    {
+        statusBar.fillSmoothRoundRect((sigX + 12), (sigY + 6), 2, 6, 1, TFT_WHITE);
+    }
+
     statusBar.setTextColor(TFT_ORANGE);
     statusBar.setTextSize(1);
-    statusBar.drawString("Status:", 0, 0);
+    statusBar.drawString("Status:", 0, 6);
 
-    statusBar.drawLine(0, 23, 160, 23, TFT_WHITE);
+    statusBar.drawLine(0, 19, 160, 19, TFT_WHITE);
+    tft.drawLine(108, 18, 108, 128, TFT_WHITE);
 
     // Draw battery icon
-    const int batX = 100; // battery icon x, y coordinate (top left)
-    const int batY = 10;
+    const int batX = 116; // battery icon x, y coordinate (top left)
+    const int batY = 4;
     unsigned short batColour = tft.color565(53, 191, 25);
-    int recWidth = map(round(percentage), 0, 100, 1, 17);
+    int recWidth = map(round(percentage), 0, 100, 1, 14);
 
     if (percentage <= 15) // change battery colour to red if battery bellow 10%
     {
@@ -76,13 +101,13 @@ void drawStatusBar(bool connected, float percentage)
     {
         batColour = tft.color565(227, 217, 30);
     }
-
-    statusBar.fillRoundRect(((batX + 18) - recWidth), batY, recWidth, 10, 2, batColour);
+    statusBar.fillSmoothRoundRect(((batX + 16) - recWidth), (batY + 2), recWidth, 6, 1, batColour);
     statusBar.drawRoundRect(batX, batY, 18, 10, 1, TFT_WHITE);
-    statusBar.fillRoundRect((batX - 2), (batY + 2), 2, 6, 1, TFT_WHITE);
+    statusBar.fillSmoothRoundRect((batX - 2), (batY + 2), 2, 6, 1, TFT_WHITE);
 
     // Draw status bar on screen
     statusBar.pushSprite(0, 0, TFT_TRANSPARENT);
+    statusBar.deleteSprite();
 }
 
 void setup()
@@ -102,7 +127,28 @@ void setup()
 void loop()
 {
     bool status = true;
-    for (int i = 0; i < 10000; i += 10)
+    if (digitalRead(upButtonPin) == LOW && rssi < 0)
+    {
+        rssi += 10;
+    }
+    else if (digitalRead(downButtonPin) == LOW && rssi > -120)
+    {
+        rssi -= 10;
+    }
+    if (digitalRead(leftButtonPin) == LOW && batteryPercentage < 100)
+    {
+        batteryPercentage += 10.0;
+    }
+    else if (digitalRead(rightButtonPin) == LOW && batteryPercentage > 0)
+    {
+        batteryPercentage -= 10.0;
+    }
+    delay(100);
+    drawAltimeter(1, 1);
+    Serial.println(String(batteryPercentage));
+    drawStatusBar(status, batteryPercentage, rssi);
+
+    /*for (int i = 0; i < 10000; i += 10)
     {
         int altitude = i;
         // Find the power of ten for the digit you want, divide your number by that value, and then modulus the quotient with ten.
@@ -113,5 +159,5 @@ void loop()
         drawAltimeter(angleMapThousandths, angleMapHundredths);
         drawStatusBar(status, 25);
         delay(25);
-    }
+    }*/
 }
