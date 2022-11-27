@@ -4,6 +4,8 @@
 #include "Hundredths Needle.h" //include bitmap images
 #include "Thousandths Needle.h"
 #include "Altimeter Background.h"
+#include "Data Transfer Icon.h"
+#include "Direction Arrow Icon.h"
 
 const int upButtonPin = 2;
 const int downButtonPin = 3;
@@ -11,12 +13,15 @@ const int leftButtonPin = 4;
 const int rightButtonPin = 5;
 int rssi = 0;
 float batteryPercentage = 100.0;
+float vehicleHeading = 0.0;
 
 TFT_eSPI tft = TFT_eSPI(128, 160);                   /* TFT instance */
 TFT_eSprite altimeterBackground = TFT_eSprite(&tft); // create altimeter background sprite
 TFT_eSprite needleThousandth = TFT_eSprite(&tft);    // create hundredth needle sprite
 TFT_eSprite needleHundredth = TFT_eSprite(&tft);     // create thousandth needle sprite
 TFT_eSprite statusBar = TFT_eSprite(&tft);           // create status bar sprite
+TFT_eSprite dataPanel = TFT_eSprite(&tft);           // create sprite for temp, humidity and direction data
+TFT_eSprite arrow = TFT_eSprite(&tft);               // create direction arrow sprite
 
 void createAltimeterBackground()
 {
@@ -45,6 +50,15 @@ void createNeedleThousandth()
     needleThousandth.setPivot(6, 30);
 }
 
+void createDirectionArrow()
+{
+    arrow.setColorDepth(8);
+    arrow.createSprite(30, 30);
+    arrow.fillSprite(TFT_TRANSPARENT);
+    arrow.pushImage(0, 0, 24, 24, directionArrow);
+    arrow.setPivot(12, 12);
+}
+
 void drawAltimeter(int thousandthsAngle, int hundredthsAngle)
 {
     createAltimeterBackground();
@@ -53,42 +67,44 @@ void drawAltimeter(int thousandthsAngle, int hundredthsAngle)
     altimeterBackground.pushSprite(0, 24, TFT_TRANSPARENT);
 }
 
-void drawStatusBar(bool connected, float percentage, int rssi)
+void drawStatusBar(float percentage, int rssi)
 {
     statusBar.setColorDepth(8);
     statusBar.createSprite(160, 20, TFT_TRANSPARENT);
     statusBar.fillSprite(TFT_BLACK);
 
     // draw RSSI
-    const int sigX = 140;
-    const int sigY = 3;
+    const int sigX = 118;
+    const int sigY = 4;
     int strength = map(rssi, -120, 0, 0, 4);
     if (strength >= 3)
     {
-        statusBar.fillSmoothRoundRect(sigX, sigY, 2, 12, 1, TFT_WHITE);
+        statusBar.fillSmoothRoundRect((sigX + 12), sigY, 2, 10, 1, TFT_WHITE);
     }
     if (strength >= 2)
     {
-        statusBar.fillSmoothRoundRect((sigX + 4), (sigY + 2), 2, 10, 1, TFT_WHITE);
+        statusBar.fillSmoothRoundRect((sigX + 8), (sigY + 2), 2, 8, 1, TFT_WHITE);
     }
     if (strength >= 1)
     {
-        statusBar.fillSmoothRoundRect((sigX + 8), (sigY + 4), 2, 8, 1, TFT_WHITE);
+        statusBar.fillSmoothRoundRect((sigX + 4), (sigY + 4), 2, 6, 1, TFT_WHITE);
     }
     if (strength >= 0)
     {
-        statusBar.fillSmoothRoundRect((sigX + 12), (sigY + 6), 2, 6, 1, TFT_WHITE);
+        statusBar.fillSmoothRoundRect(sigX, (sigY + 6), 2, 4, 1, TFT_WHITE);
     }
 
+    // draw data transfer symbol
+    statusBar.pushImage(106, 6, 8, 8, dataTransfer);
+
+    // draw status text
     statusBar.setTextColor(TFT_ORANGE);
     statusBar.setTextSize(1);
-    statusBar.drawString("Status:", 0, 6);
 
     statusBar.drawLine(0, 19, 160, 19, TFT_WHITE);
-    tft.drawLine(108, 18, 108, 128, TFT_WHITE);
 
     // Draw battery icon
-    const int batX = 116; // battery icon x, y coordinate (top left)
+    const int batX = 136; // battery icon x, y coordinate (top left)
     const int batY = 4;
     unsigned short batColour = tft.color565(53, 191, 25);
     int recWidth = map(round(percentage), 0, 100, 1, 14);
@@ -101,13 +117,49 @@ void drawStatusBar(bool connected, float percentage, int rssi)
     {
         batColour = tft.color565(227, 217, 30);
     }
-    statusBar.fillSmoothRoundRect(((batX + 16) - recWidth), (batY + 2), recWidth, 6, 1, batColour);
+    statusBar.fillSmoothRoundRect((batX + 2), (batY + 2), recWidth, 6, 1, batColour);
     statusBar.drawRoundRect(batX, batY, 18, 10, 1, TFT_WHITE);
-    statusBar.fillSmoothRoundRect((batX - 2), (batY + 2), 2, 6, 1, TFT_WHITE);
-
+    statusBar.fillSmoothRoundRect((batX + 18), (batY + 2), 2, 6, 2, TFT_WHITE);
     // Draw status bar on screen
     statusBar.pushSprite(0, 0, TFT_TRANSPARENT);
     statusBar.deleteSprite();
+}
+
+void drawDataPanel(float heading)
+{
+    const int panelHeight = 108;
+    const int panelWidth = 50;
+    dataPanel.setColorDepth(8);
+    dataPanel.createSprite(panelWidth, panelHeight, TFT_TRANSPARENT);
+    dataPanel.fillSprite(TFT_BLACK);
+    dataPanel.setPivot(25, 24);
+
+    dataPanel.setTextColor(TFT_WHITE);
+    dataPanel.setTextDatum(MC_DATUM);
+    dataPanel.setTextSize(2);
+
+    dataPanel.drawLine(0, 0, 0, panelHeight, TFT_WHITE);
+    dataPanel.drawLine(0, 54, panelWidth, 54, TFT_WHITE);
+    dataPanel.drawLine(0, 82, panelWidth, 82, TFT_WHITE);
+    dataPanel.drawLine(0, 54, panelWidth, 54, TFT_WHITE);
+
+    // dataPanel.drawRoundRect(0, 1, panelWidth, 53, 3, TFT_WHITE);
+
+    // dataPanel.drawRoundRect(0, 55, panelWidth, 26, 3, TFT_WHITE);
+    dataPanel.drawString("20C", 25, 70);
+    dataPanel.drawCircle(43, 60, 2, TFT_WHITE);
+
+    // dataPanel.drawRoundRect(0, 82, panelWidth, 26, 3, TFT_WHITE);
+    dataPanel.drawString("50%", 25, 97);
+    dataPanel.setTextSize(0);
+    dataPanel.drawString("10 KNTS", 25, 48);
+    dataPanel.drawString("NW", 10, 8);
+
+    // Draw arrow icon
+    createDirectionArrow();
+    arrow.pushRotated(&dataPanel, heading, TFT_TRANSPARENT);
+
+    dataPanel.pushSprite(108, 20);
 }
 
 void setup()
@@ -126,29 +178,7 @@ void setup()
 
 void loop()
 {
-    bool status = true;
-    if (digitalRead(upButtonPin) == LOW && rssi < 0)
-    {
-        rssi += 10;
-    }
-    else if (digitalRead(downButtonPin) == LOW && rssi > -120)
-    {
-        rssi -= 10;
-    }
-    if (digitalRead(leftButtonPin) == LOW && batteryPercentage < 100)
-    {
-        batteryPercentage += 10.0;
-    }
-    else if (digitalRead(rightButtonPin) == LOW && batteryPercentage > 0)
-    {
-        batteryPercentage -= 10.0;
-    }
-    delay(100);
-    drawAltimeter(1, 1);
-    Serial.println(String(batteryPercentage));
-    drawStatusBar(status, batteryPercentage, rssi);
-
-    /*for (int i = 0; i < 10000; i += 10)
+    for (int i = 0; i < 10000; i += 10)
     {
         int altitude = i;
         // Find the power of ten for the digit you want, divide your number by that value, and then modulus the quotient with ten.
@@ -157,7 +187,26 @@ void loop()
         int angleMapHundredths = map(altitudeHundredths, 0, 1000, 0, 360);
         int angleMapThousandths = map(altitude, 0, 10000, 0, 360);
         drawAltimeter(angleMapThousandths, angleMapHundredths);
-        drawStatusBar(status, 25);
-        delay(25);
-    }*/
+        drawStatusBar(batteryPercentage, rssi);
+        drawDataPanel(vehicleHeading);
+        vehicleHeading += 10.0;
+        delay(100);
+        bool status = true;
+        if (digitalRead(upButtonPin) == LOW && rssi < 0)
+        {
+            rssi += 10;
+        }
+        else if (digitalRead(downButtonPin) == LOW && rssi > -120)
+        {
+            rssi -= 10;
+        }
+        if (digitalRead(leftButtonPin) == LOW && batteryPercentage < 100)
+        {
+            batteryPercentage += 10.0;
+        }
+        else if (digitalRead(rightButtonPin) == LOW && batteryPercentage > 0)
+        {
+            batteryPercentage -= 10.0;
+        }
+    }
 }
