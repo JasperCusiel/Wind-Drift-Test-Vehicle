@@ -13,9 +13,11 @@
 #include "Roboto mono 8pt.h"
 #include "Roboto mono 10pt.h"
 #include "Roboto mono 17pt.h"
+#include "Roboto mono 14pt.h"
 #define FONT_8PT robotoMono8
 #define FONT_10PT robotoMono10
 #define FONT_17PT robotoMono17
+#define FONT_14PT robotoMono14
 // Variables
 const int upButtonPin = 2;
 const int downButtonPin = 3;
@@ -26,32 +28,41 @@ float batteryPercentage = 100.0;
 float vehicleHeading = 0.0;
 int count = 0;
 int tick = 0;
-int tempInput = 0;
+int pageNum = 1;
+float testLat = -90.0000;
+float testLong = -180.0000;
+
+// Button Variables
+int upBtnState;
+int upBtnLastState = HIGH;
+unsigned long lastDebounceTimeUpBtn = 0;
+
+int downBtnState;
+int downBtnLastState = HIGH;
+unsigned long lastDebounceTimeDownBtn = 0;
+
+unsigned long debounceDelay = 50;
+
 // TFT e_SPI Instance
 TFT_eSPI tft = TFT_eSPI(128, 160);
-TFT_eSprite altimeterBackground = TFT_eSprite(&tft); // create altimeter background sprite
-TFT_eSprite needleThousandth = TFT_eSprite(&tft);    // create hundredth needle sprite
-TFT_eSprite needleHundredth = TFT_eSprite(&tft);     // create thousandth needle sprite
-TFT_eSprite statusBar = TFT_eSprite(&tft);           // create status bar sprite
-TFT_eSprite dataPanel = TFT_eSprite(&tft);           // create sprite for temp, humidity and direction data
-TFT_eSprite arrow = TFT_eSprite(&tft);               // create direction arrow sprite
-TFT_eSprite messages = TFT_eSprite(&tft);            // create sprite to display system messages
-TFT_eSprite gpsData = TFT_eSprite(&tft);             // create sprite to display GPS lat & long
-TFT_eSprite dataTransfer = TFT_eSprite(&tft);        // create sprite to display data transfer page
+TFT_eSprite page = TFT_eSprite(&tft);             // create altimeter background sprite
+TFT_eSprite needleThousandth = TFT_eSprite(&tft); // create hundredth needle sprite
+TFT_eSprite needleHundredth = TFT_eSprite(&tft);  // create thousandth needle sprite
+TFT_eSprite statusBar = TFT_eSprite(&tft);        // create status bar sprite
+TFT_eSprite dataPanel = TFT_eSprite(&tft);        // create sprite for temp, humidity and direction data
+TFT_eSprite arrow = TFT_eSprite(&tft);            // create direction arrow sprite
+TFT_eSprite messages = TFT_eSprite(&tft);         // create sprite to display system messages
 
 //====================================================================================
-//                                Create Altimeter Sprites
+//                                 Create Sprites
 //====================================================================================
-void createAltimeterBackground()
+void createPageSprite()
 {
-    altimeterBackground.setColorDepth(8);
-    altimeterBackground.createSprite(108, 108);
-    altimeterBackground.setPivot(52, 55);
-    altimeterBackground.fillSprite(TFT_TRANSPARENT);
-    altimeterBackground.pushImage(0, 4, 104, 104, altimeterBackgroundImg);
-    altimeterBackground.drawLine(0, 0, 108, 0, TFT_WHITE);
+    page.setColorDepth(8);
+    page.createSprite(108, 107);
+    page.setPivot(52, 54);
+    page.fillSprite(TFT_TRANSPARENT);
 }
-
 void createNeedleHundredth()
 {
     needleHundredth.setColorDepth(8);
@@ -60,7 +71,6 @@ void createNeedleHundredth()
     needleHundredth.setPivot(4, 42);
     needleHundredth.pushImage(0, 0, 8, 64, altHandHundredths);
 }
-
 void createNeedleThousandth()
 {
     needleThousandth.setColorDepth(8);
@@ -69,10 +79,6 @@ void createNeedleThousandth()
     needleThousandth.setPivot(6, 30);
     needleThousandth.pushImage(0, 0, 12, 44, altHandThousandths);
 }
-
-//====================================================================================
-//                             Create Data Panel Sprites
-//====================================================================================
 void createDirectionArrow()
 {
     arrow.setColorDepth(8);
@@ -101,21 +107,33 @@ void createDataPanel()
     dataPanel.fillSprite(TFT_BLACK);
     dataPanel.setPivot(25, 24);
 }
-
 //====================================================================================
 //                             Draw Sprite Graphics
 //====================================================================================
 
 void drawAltimeter(int thousandthsAngle, int hundredthsAngle)
 {
-    altimeterBackground.pushImage(0, 4, 104, 104, altimeterBackgroundImg);
-    needleThousandth.pushRotated(&altimeterBackground, thousandthsAngle, TFT_TRANSPARENT);
-    needleHundredth.pushRotated(&altimeterBackground, hundredthsAngle, TFT_TRANSPARENT);
-    altimeterBackground.pushSprite(0, 20, TFT_TRANSPARENT);
+    /**
+     * @brief Takes needle angles and draws on altimeter background
+     * @param thousandthsAngle angle of the thousandths indicator needle
+     * @param hundredthsAngle angle of the hundredths indicator needle
+     */
+    page.pushImage(0, 0, 108, 108, altimeterBackgroundImg);
+    needleThousandth.pushRotated(&page, thousandthsAngle, TFT_TRANSPARENT);
+    needleHundredth.pushRotated(&page, hundredthsAngle, TFT_TRANSPARENT);
+    page.pushSprite(0, 21, TFT_TRANSPARENT);
 }
 
 void drawStatusBar(float percentage, int rssi, bool transmitting, bool receiving)
 {
+    /**
+     * @brief Draws the signal strength, battery and transmitting/receiving indicaors
+     * @param percentage battery percentage as int value
+     * @param rssi LoRa radio signal strength as RSSI value (0 -> -120 range)
+     * @param transmitting True if LoRa radio is transmittingd ata from vehicle
+     * @param receiving True if LoRa radio is receiving data from vehicle
+     *
+     */
 
     // draw RSSI
     const int sigX = 14;
@@ -185,11 +203,15 @@ void drawStatusBar(float percentage, int rssi, bool transmitting, bool receiving
 
 void drawDataPanel(float heading, float temp, float humidity, float speed)
 {
+    /**
+     * @brief
+     *
+     */
     dataPanel.fillSprite(TFT_BLACK);
     const int panelHeight = 108;
     const int panelWidth = 50;
     char direction[3];
-    // heading angle to N, NE, E, SE, S, SW, W, NW
+    // Changes heading angle to N, NE, E, SE, S, SW, W, NW
     if (((heading > 337.5) && (heading <= 360)) || ((heading >= 0) && (heading <= 22.5)))
     {
         strcpy(direction, "N ");
@@ -302,23 +324,83 @@ void drawMessages()
 //                                    Pages
 //====================================================================================
 
-void drawLayout()
+void drawLayout(int batteryPercentage, int rssi, bool transmitting, bool receiving, int heading, float velocity, int temp, int humidity)
 {
-    drawStatusBar(batteryPercentage, rssi, true, true);
-    drawDataPanel(vehicleHeading, tempInput, 100, 13.5);
+    /**
+     * @brief Draws the base UI --> status bar, data panel and message bar
+     * @param batteryPercentage vehicle battery percentage to be displayed
+     * @param rssi LoRa signal strength as RSSI value
+     * @param transmitting True if LoRa radio is transmittingd ata from vehicle
+     * @param receiving True if LoRa radio is receiving data from vehicle
+     * @param heading Vehicle heading in degrees
+     * @param velocity Vehicle velocity
+     * @param temp SHT30 external sensor temp in degrees
+     * @param humidity SHT30 humidity in RH
+     */
+    drawStatusBar(batteryPercentage, rssi, transmitting, receiving);
+    drawDataPanel(vehicleHeading, temp, humidity, velocity);
     drawMessages();
+    tft.drawLine(0, 20, 108, 20, TFT_WHITE);
 }
 
-void drawAltimeterPage()
+void drawAltimeterPage(int alt)
 {
+    /**
+     * @brief converst altitude to needle positions and calls drawAltimeter function
+     * @param alt vehicle current altitude
+     */
+    int thousandths = (alt / 1000U) % 10;
+    int altitudeHundredths = alt - (thousandths * 1000);
+    int angleMapHundredths = map(altitudeHundredths, 0, 1000, 0, 360);
+    int angleMapThousandths = map(alt, 0, 10000, 0, 360);
+    page.fillSprite(TFT_BLACK);
+    drawAltimeter(angleMapThousandths, angleMapHundredths);
 }
 
-void drawGpsPage()
+void drawGpsPage(float latitude, float longitude)
 {
+    int latDegrees = latitude;
+    int latMin = (latitude - latDegrees) * 60;
+    float latSec = (((latitude - latDegrees) * 60) - latMin) * 60;
+    char latitudeDMS[16];
+    char latSec1DP [5];
+    dtostrf(abs(latSec),4, 1, latSec1DP);
+    sprintf(latitudeDMS, "%d° %d' %s\"", abs(latDegrees), abs(latMin), latSec1DP);
+
+    int longDegrees = longitude;
+    int longMin = (longitude - longDegrees) * 60;
+    float longSec = (((longitude - longDegrees) * 60) - longMin) * 60;
+    char longitudeDMS[16];
+    char longSec1DP [5];
+    dtostrf(abs(longSec),4, 1, longSec1DP);
+    sprintf(longitudeDMS, "%d° %d' %s\"", abs(longDegrees), abs(longMin), longSec1DP);
+
+    page.fillSprite(TFT_BLACK);
+    page.setTextDatum(MC_DATUM);
+    page.setTextColor(TFT_WHITE);
+    page.loadFont(FONT_10PT);
+    page.drawString("DECIMAL DEGREES", 54, 5);
+    page.drawString("DEGREES MIN SEC", 54, 60);
+
+    page.unloadFont();
+    page.drawLine(0, 9, 108, 9, TFT_WHITE);
+    page.drawLine(0, 54, 108, 54, TFT_WHITE);
+    page.drawLine(0, 64, 108, 64, TFT_WHITE);
+    page.loadFont(FONT_17PT);
+    page.drawFloat(latitude, 5, 54, 23);
+    page.drawFloat(longitude, 5, 54, 41);
+    page.unloadFont();
+    page.loadFont(FONT_14PT);
+    page.drawString(latitudeDMS, 54, 78);
+    page.drawString(longitudeDMS, 54, 94);
+    page.unloadFont();
+    page.pushSprite(0, 21);
 }
 
 void drawDataTransferPage()
 {
+    page.fillSprite(TFT_RED);
+    page.pushSprite(0, 21);
 }
 //====================================================================================
 //                                    Setup
@@ -330,7 +412,7 @@ void setup()
     tft.setRotation(1);
     tft.fillScreen(TFT_BLACK);
     // Create Sprites
-    createAltimeterBackground();
+    createPageSprite();
     createNeedleHundredth();
     createNeedleThousandth();
     createStatusBar();
@@ -348,54 +430,78 @@ void setup()
 //====================================================================================
 void loop()
 {
-    drawLayout();
 
-    // for (int i = 0; i < 10000; i += 10)
-    // {
-    //     int altitude = i;
-    //     // Find the power of ten for the digit you want, divide your number by that value, and then modulus the quotient with ten.
-    //     int thousandths = (altitude / 1000U) % 10;
-    //     int altitudeHundredths = altitude - (thousandths * 1000);
-    //     int angleMapHundredths = map(altitudeHundredths, 0, 1000, 0, 360);
-    //     int angleMapThousandths = map(altitude, 0, 10000, 0, 360);
-    //     bool dataUp = false;
-    //     bool dataDown = false;
+    // read the state up button and store
+    int upBtnReading = digitalRead(upButtonPin);
+    // check if button changed from HIGH to LOW and you've waited long enough to ignore noise, only change page when button goes HIGH -> LOW -> HIGH
 
-    //     drawAltimeter(angleMapThousandths, angleMapHundredths);
-    //     if (vehicleHeading < 360)
-    //     {
-    //         vehicleHeading += 10.0;
-    //     }
-    //     else
-    //     {
-    //         vehicleHeading = 0;
-    //     }
+    // If the switch changed, due to noise or pressing:
+    if (upBtnReading != upBtnLastState)
+    {
+        // reset the debouncing timer
+        lastDebounceTimeUpBtn = millis();
+    }
 
-    //     // delay(100);
-    //     bool status = true;
-    //     if (digitalRead(upButtonPin) == LOW && rssi < 0)
-    //     {
-    //         rssi += 10;
-    //     }
-    //     else if (digitalRead(downButtonPin) == LOW && rssi > -120)
-    //     {
-    //         rssi -= 10;
-    //     }
-    //     if (digitalRead(upButtonPin) == LOW)
-    //     {
-    //         tempInput++;
-    //     }
-    //     else if (digitalRead(downButtonPin) == LOW)
-    //     {
-    //         tempInput--;
-    //     }
-    //     if (digitalRead(leftButtonPin) == LOW && batteryPercentage < 100)
-    //     {
-    //         batteryPercentage += 10.0;
-    //     }
-    //     else if (digitalRead(rightButtonPin) == LOW && batteryPercentage > 0)
-    //     {
-    //         batteryPercentage -= 10.0;
-    //     }
-    // }
+    if ((millis() - lastDebounceTimeUpBtn) > debounceDelay)
+    {
+        // whatever the reading is at, it's been there for longer than the debounce
+        // delay, so take it as the actual current state:
+
+        // if the button state has changed:
+        if (upBtnReading != upBtnState)
+        {
+            upBtnState = upBtnReading;
+
+            // only change page if button is still LOW
+            if (upBtnState == LOW)
+            {
+                if (pageNum < 2)
+                {
+                    pageNum++;
+                }
+            }
+        }
+    }
+    // save current button state to check that button goes HIGH -> LOW -> HIGH
+    upBtnLastState = upBtnReading;
+
+    // down button
+
+    int downBtnReading = digitalRead(downButtonPin);
+    if (downBtnReading != downBtnLastState)
+    {
+        lastDebounceTimeDownBtn = millis();
+    }
+
+    if ((millis() - lastDebounceTimeDownBtn) > debounceDelay)
+    {
+        if (downBtnReading != downBtnState)
+        {
+            downBtnState = downBtnReading;
+            if (downBtnState == LOW)
+            {
+                if (pageNum > 0)
+                {
+                    pageNum--;
+                }
+            }
+        }
+    }
+    // save current button state to check that button goes HIGH -> LOW -> HIGH
+    downBtnLastState = downBtnReading;
+    //testLat += 1;
+    //testLong += 1;
+    drawLayout(100, -120, true, true, 270, 13.5, -20, 100);
+    if (pageNum == 0)
+    {
+        drawAltimeterPage(1500);
+    }
+    else if (pageNum == 1)
+    {
+        drawGpsPage(testLat, testLong);
+    }
+    else if (pageNum == 2)
+    {
+        drawDataTransferPage();
+    }
 }
