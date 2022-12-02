@@ -9,6 +9,8 @@
 #include "Direction Arrow Icon.h"
 #include "Data Receive Grey Icon.h"
 #include "Data Transfer Grey Icon.h"
+#include "Export Data Icon.h"
+#include "Usb to GX12 Icon.h"
 // Include Font Files
 #include "Roboto mono 8pt.h"
 #include "Roboto mono 10pt.h"
@@ -363,16 +365,16 @@ void drawGpsPage(float latitude, float longitude)
     int latMin = (latitude - latDegrees) * 60;
     float latSec = (((latitude - latDegrees) * 60) - latMin) * 60;
     char latitudeDMS[16];
-    char latSec1DP [5];
-    dtostrf(abs(latSec),4, 1, latSec1DP);
+    char latSec1DP[5];
+    dtostrf(abs(latSec), 4, 1, latSec1DP);
     sprintf(latitudeDMS, "%d° %d' %s\"", abs(latDegrees), abs(latMin), latSec1DP);
 
     int longDegrees = longitude;
     int longMin = (longitude - longDegrees) * 60;
     float longSec = (((longitude - longDegrees) * 60) - longMin) * 60;
     char longitudeDMS[16];
-    char longSec1DP [5];
-    dtostrf(abs(longSec),4, 1, longSec1DP);
+    char longSec1DP[5];
+    dtostrf(abs(longSec), 4, 1, longSec1DP);
     sprintf(longitudeDMS, "%d° %d' %s\"", abs(longDegrees), abs(longMin), longSec1DP);
 
     page.fillSprite(TFT_BLACK);
@@ -399,7 +401,15 @@ void drawGpsPage(float latitude, float longitude)
 
 void drawDataTransferPage()
 {
-    page.fillSprite(TFT_RED);
+    page.fillSprite(TFT_BLACK);
+    page.pushImage(4, 25, 100, 24, downloadIcon);
+    page.pushImage(4, 55, 100, 14, usbGx12Icon);
+    page.drawLine(0, 9, 108, 9, TFT_WHITE);
+    page.loadFont(FONT_10PT);
+    page.setTextDatum(MC_DATUM);
+    page.setTextColor(tft.color565(255, 130, 13));
+    page.drawString("USB DATA TRANSFER", 54, 5);
+
     page.pushSprite(0, 21);
 }
 //====================================================================================
@@ -489,8 +499,8 @@ void loop()
     }
     // save current button state to check that button goes HIGH -> LOW -> HIGH
     downBtnLastState = downBtnReading;
-    //testLat += 1;
-    //testLong += 1;
+    // testLat += 1;
+    // testLong += 1;
     drawLayout(100, -120, true, true, 270, 13.5, -20, 100);
     if (pageNum == 0)
     {
