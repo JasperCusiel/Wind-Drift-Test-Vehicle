@@ -11,6 +11,9 @@
 #include "Data Transfer Grey Icon.h"
 #include "Export Data Icon.h"
 #include "Usb to GX12 Icon.h"
+#include "Caution Icon.h"
+#include "File Transfer Icon.h"
+#include "Data Transfer Arrow.h"
 // Include Font Files
 #include "Roboto mono 8pt.h"
 #include "Roboto mono 10pt.h"
@@ -34,14 +37,28 @@ int pageNum = 1;
 float testLat = -90.0000;
 float testLong = -180.0000;
 
-// Button Variables
-int upBtnState;
-int upBtnLastState = HIGH;
-unsigned long lastDebounceTimeUpBtn = 0;
+// data transfer page variables
+int transferDataState;
+int transferArrowXVal = 0;
 
-int downBtnState;
-int downBtnLastState = HIGH;
+// Button Variables
+int upButtonState;
+int upButtonLastState = HIGH;
+unsigned long lastDebounceTimeUpButton = 0;
+
+int downButtonState;
+int downButtonLastState = HIGH;
 unsigned long lastDebounceTimeDownBtn = 0;
+
+int leftButtonState;
+int leftButtonLastState = HIGH;
+unsigned long lastDebounceTimeLeftBtn = 0;
+bool leftButtonPressed;
+
+int rightButtonState;
+int rightButtonLastState = HIGH;
+unsigned long lastDebounceTimeRightBtn = 0;
+bool rightButtonPressed;
 
 unsigned long debounceDelay = 50;
 
@@ -399,16 +416,60 @@ void drawGpsPage(float latitude, float longitude)
     page.pushSprite(0, 21);
 }
 
-void drawDataTransferPage()
+void drawDataTransferPage(int transferState)
 {
+    int moveButtonPositionX = 0;
     page.fillSprite(TFT_BLACK);
-    page.pushImage(4, 25, 100, 24, downloadIcon);
-    page.pushImage(4, 55, 100, 14, usbGx12Icon);
-    page.drawLine(0, 9, 108, 9, TFT_WHITE);
-    page.loadFont(FONT_10PT);
+
+    page.drawLine(0, 9, 108, 9, TFT_WHITE); // divider lines
+    page.drawLine(0, 70, 108, 70, TFT_WHITE);
+
+    page.loadFont(FONT_10PT); // text
     page.setTextDatum(MC_DATUM);
-    page.setTextColor(tft.color565(255, 130, 13));
+    page.setTextColor(TFT_WHITE);
     page.drawString("USB DATA TRANSFER", 54, 5);
+    page.setTextColor(TFT_LIGHTGREY);
+
+    if (transferState == 0)
+    {
+        page.drawString("Start Transfer?", 54, 78);
+        page.pushImage(4, 18, 100, 24, downloadIcon); // file to computer icon
+        page.pushImage(4, 50, 100, 14, usbGx12Icon);  // gx12 to usb cable icon
+        page.setTextColor(TFT_GREEN);
+        page.drawString("YES", 90, 95);
+    }
+    else if (transferState == 1)
+    {
+        page.pushImage(37, 15, 40, 50, cautionIcon);
+        page.drawString("Are You Sure?", 54, 78);
+        page.setTextColor(TFT_RED);
+        page.drawString("NO", 20, 95);
+        page.setTextColor(TFT_GREEN);
+        page.drawString("YES", 90, 95);
+    }
+    else if (transferState == 2)
+    {
+        page.drawString("Transfer Mode", 54, 78);
+        page.pushImage(4, 30, 100, 24, fileTransfer);
+        page.setTextColor(TFT_RED);
+        page.drawString("CANCEL", 30, 95);
+        moveButtonPositionX += 20;
+        if (transferArrowXVal < 20)
+        {
+            transferArrowXVal++;
+        }
+        else
+        {
+            transferArrowXVal = 0;
+        }
+        page.pushImage((28 + transferArrowXVal), 36, 13, 10, transferArrow);
+    }
+    page.unloadFont();
+    page.fillSmoothRoundRect((31 + moveButtonPositionX), 88, 46, 13, 6, TFT_LIGHTGREY); // button icons
+    page.fillRect((50 + moveButtonPositionX), 88, 8, 13, TFT_BLACK);
+    page.fillSmoothCircle((37 + moveButtonPositionX), 94, 4, TFT_BLACK);
+    page.fillSmoothCircle((37 + moveButtonPositionX), 94, 2, TFT_LIGHTGREY);
+    page.fillSmoothRoundRect((68 + moveButtonPositionX), 90, 2, 9, 2, TFT_BLACK);
 
     page.pushSprite(0, 21);
 }
@@ -442,30 +503,30 @@ void loop()
 {
 
     // read the state up button and store
-    int upBtnReading = digitalRead(upButtonPin);
+    int upButtonReading = digitalRead(upButtonPin);
     // check if button changed from HIGH to LOW and you've waited long enough to ignore noise, only change page when button goes HIGH -> LOW -> HIGH
 
     // If the switch changed, due to noise or pressing:
-    if (upBtnReading != upBtnLastState)
+    if (upButtonReading != upButtonLastState)
     {
         // reset the debouncing timer
-        lastDebounceTimeUpBtn = millis();
+        lastDebounceTimeUpButton = millis();
     }
 
-    if ((millis() - lastDebounceTimeUpBtn) > debounceDelay)
+    if ((millis() - lastDebounceTimeUpButton) > debounceDelay)
     {
         // whatever the reading is at, it's been there for longer than the debounce
         // delay, so take it as the actual current state:
 
         // if the button state has changed:
-        if (upBtnReading != upBtnState)
+        if (upButtonReading != upButtonState)
         {
-            upBtnState = upBtnReading;
+            upButtonState = upButtonReading;
 
             // only change page if button is still LOW
-            if (upBtnState == LOW)
+            if (upButtonState == LOW)
             {
-                if (pageNum < 2)
+                if ((pageNum < 2) && (transferDataState == 0))
                 {
                     pageNum++;
                 }
@@ -473,38 +534,84 @@ void loop()
         }
     }
     // save current button state to check that button goes HIGH -> LOW -> HIGH
-    upBtnLastState = upBtnReading;
+    upButtonLastState = upButtonReading;
 
     // down button
-
-    int downBtnReading = digitalRead(downButtonPin);
-    if (downBtnReading != downBtnLastState)
+    int downButtonReading = digitalRead(downButtonPin);
+    if (downButtonReading != downButtonLastState)
     {
         lastDebounceTimeDownBtn = millis();
     }
 
     if ((millis() - lastDebounceTimeDownBtn) > debounceDelay)
     {
-        if (downBtnReading != downBtnState)
+        if (downButtonReading != downButtonState)
         {
-            downBtnState = downBtnReading;
-            if (downBtnState == LOW)
+            downButtonState = downButtonReading;
+            if (downButtonState == LOW)
             {
-                if (pageNum > 0)
+                if ((pageNum > 0) && (transferDataState == 0))
                 {
                     pageNum--;
                 }
             }
         }
     }
-    // save current button state to check that button goes HIGH -> LOW -> HIGH
-    downBtnLastState = downBtnReading;
+    downButtonLastState = downButtonReading;
+
+    // left button
+    int leftButtonReading = digitalRead(leftButtonPin);
+    if (leftButtonReading != leftButtonLastState)
+    {
+        lastDebounceTimeLeftBtn = millis();
+        leftButtonPressed = false;
+    }
+
+    if ((millis() - lastDebounceTimeLeftBtn) > debounceDelay)
+    {
+        if (leftButtonReading != leftButtonState)
+        {
+            leftButtonState = leftButtonReading;
+            if (leftButtonState == LOW)
+            {
+                if ((transferDataState == 2) || (transferDataState == 1))
+                {
+                    transferDataState = 0;
+                }
+            }
+        }
+    }
+    leftButtonLastState = leftButtonReading;
+
+    // right button
+    int rightButtonReading = digitalRead(rightButtonPin);
+    if (rightButtonReading != rightButtonLastState)
+    {
+        lastDebounceTimeRightBtn = millis();
+    }
+
+    if ((millis() - lastDebounceTimeRightBtn) > debounceDelay)
+    {
+        if (rightButtonReading != rightButtonState)
+        {
+            rightButtonState = rightButtonReading;
+            if (rightButtonState == LOW)
+            {
+                if (transferDataState < 2)
+                {
+                    transferDataState++;
+                }
+            }
+        }
+    }
+    rightButtonLastState = rightButtonReading;
+
     // testLat += 1;
     // testLong += 1;
     drawLayout(100, -120, true, true, 270, 13.5, -20, 100);
     if (pageNum == 0)
     {
-        drawAltimeterPage(1500);
+        drawDataTransferPage(transferDataState);
     }
     else if (pageNum == 1)
     {
@@ -512,6 +619,6 @@ void loop()
     }
     else if (pageNum == 2)
     {
-        drawDataTransferPage();
+        drawAltimeterPage(1500);
     }
 }
