@@ -33,7 +33,7 @@ float batteryPercentage = 100.0;
 float vehicleHeading = 0.0;
 int count = 0;
 int tick = 0;
-int pageNum = 1;
+int pageNum = 2;
 float testLat = -90.0000;
 float testLong = -180.0000;
 
