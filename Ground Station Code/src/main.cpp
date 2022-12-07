@@ -1,5 +1,10 @@
 #include <Arduino.h>
 #include <TFT_eSPI.h>
+#include <SPI.h>
+#include <RP2040_SD.h>
+#include <Adafruit_TinyUSB.h>
+#include <EEPROM.h>
+
 // Include Bitmap Images
 #include "Hundredths Needle.h"
 #include "Thousandths Needle.h"
@@ -23,6 +28,20 @@
 #define FONT_10PT robotoMono10
 #define FONT_17PT robotoMono17
 #define FONT_14PT robotoMono14
+
+// SD card setup
+#define PIN_SD_MOSI PIN_SPI0_MOSI
+#define PIN_SD_MISO PIN_SPI0_MISO
+#define PIN_SD_SCK PIN_SPI0_SCK
+#define PIN_SD_SS 7
+// file name to use for writing
+Adafruit_USBD_MSC usb_msc;
+Sd2Card card;
+RP2040_SdVolume volume;
+RP2040_SdFile root;
+// Log file format
+char filename[] = "LOG000.CSV";
+
 // Variables
 const int upButtonPin = 2;
 const int downButtonPin = 3;
@@ -474,10 +493,114 @@ void drawDataTransferPage(int transferState)
     page.pushSprite(0, 21);
 }
 //====================================================================================
+//                                    SD card callbacks
+//====================================================================================
+
+// Callback invoked when received READ10 command.
+// Copy disk's data to buffer (up to bufsize) and
+// return number of copied bytes (must be multiple of block size)
+int32_t msc_read_cb(uint32_t lba, void *buffer, uint32_t bufsize)
+{
+    (void)bufsize;
+    return card.readBlock(lba, (uint8_t *)buffer) ? 512 : -1;
+}
+
+// Callback invoked when received WRITE10 command.
+// Process data in buffer to disk's storage and
+// return number of written bytes (must be multiple of block size)
+int32_t msc_write_cb(uint32_t lba, uint8_t *buffer, uint32_t bufsize)
+{
+    (void)bufsize;
+    return card.writeBlock(lba, buffer) ? 512 : -1;
+}
+
+// Callback invoked when WRITE10 command is completed (status received and accepted by host).
+// used to flush any pending cache.
+void msc_flush_cb(void)
+{
+    // nothing to do
+}
+void start_usb_mass_storage()
+{
+    // Set disk vendor id, product id and revision with string up to 8, 16, 4 characters respectively
+    usb_msc.setID("Adafruit", "SD Card", "1.0");
+
+    // Set read write callback
+    usb_msc.setReadWriteCallback(msc_read_cb, msc_write_cb, msc_flush_cb);
+
+    // Still initialize MSC but tell usb stack that MSC is not ready to read/write
+    // If we don't initialize, board will be enumerated as CDC only
+    usb_msc.setUnitReady(false);
+    usb_msc.begin();
+    Serial.begin(9600);
+
+    if (!card.init(SPI_FULL_SPEED, PIN_SD_SS))
+    {
+    }
+
+    // Now we will try to open the 'volume'/'partition' - it should be FAT16 or FAT32
+    if (!volume.init(card))
+    {
+        Serial.println("Could not find FAT16/FAT32 partition.\nMake sure you've formatted the card");
+        while (1)
+            delay(1);
+    }
+
+    uint32_t block_count = volume.blocksPerCluster() * volume.clusterCount();
+
+    Serial.print("Volume size (MB):  ");
+    Serial.println((block_count / 2) / 1024);
+
+    // Set disk size, SD block size is always 512
+    usb_msc.setCapacity(block_count, 512);
+
+    // MSC is ready for read/write
+    usb_msc.setUnitReady(true);
+}
+
+void createDataLoggingFile()
+{
+    EEPROM.begin(512);
+    // for (int i = 0; i < 512; i++)
+    // {
+    //     EEPROM.write(i, 0);
+    // }
+    int fileNum = EEPROM.read(0);
+    Serial.println(fileNum);
+    filename[3] = fileNum / 100 + '0';
+    filename[4] = (fileNum % 100) / 10 + '0';
+    filename[5] = fileNum % 10 + '0';
+    if (!SD.exists(filename))
+    {
+        Serial.println("test");
+        // only open a new file if it doesn't exist
+        // generate a new file name
+        filename[3] = fileNum / 100 + '0';
+        filename[4] = (fileNum % 100) / 10 + '0';
+        filename[5] = fileNum % 10 + '0';
+        // create the new file
+        RP2040_SDLib::File logfile = SD.open(filename, FILE_WRITE);
+        fileNum++;                // increment the file number
+        EEPROM.write(0, fileNum); // store the new file number in eeprom
+    }
+    EEPROM.end();
+}
+
+//====================================================================================
 //                                    Setup
 //====================================================================================
 void setup()
 {
+    pinMode(upButtonPin, INPUT_PULLUP);
+    int upButtonReading = digitalRead(upButtonPin);
+
+    if (upButtonReading == LOW)
+    {
+        start_usb_mass_storage();
+        while (1)
+        {
+        }
+    }
     Serial.begin(9600);
     tft.begin();
     tft.setRotation(1);
@@ -491,11 +614,22 @@ void setup()
     createDirectionArrow();
     createDataPanel();
     // Setup Physical buttons
-    pinMode(upButtonPin, INPUT_PULLUP);
     pinMode(downButtonPin, INPUT_PULLUP);
     pinMode(leftButtonPin, INPUT_PULLUP);
     pinMode(rightButtonPin, INPUT_PULLUP);
+    // Start SD card
+
+    if (!SD.begin(PIN_SD_SS))
+    {
+        Serial.println("Initialization failed!");
+        return;
+    }
+    Serial.println("Initialization done.");
+    createDataLoggingFile();
+    // set SPI speed here to force 27Mhz (max display chip speed)
+    SPI.beginTransaction(SPISettings(27000000, MSBFIRST, SPI_MODE0));
 }
+
 //====================================================================================
 //                                    Loop
 //====================================================================================
