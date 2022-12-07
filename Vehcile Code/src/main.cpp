@@ -188,14 +188,14 @@ void setup(void)
   Wire1.setSCL(Board_SCL);
   Wire1.begin();
 
-  // SPI Inititialization 
+  // SPI Inititialization
   SPI.begin();
 
   barometricSensor.begin(Wire1);
 
   // LoRa Initialization
   LoRa.setSPI(SPI);
-  LoRa.setPins(RFM_CS, RFM_RST, RFM_IQR); 
+  LoRa.setPins(RFM_CS, RFM_RST, RFM_IQR);
   if (!LoRa.begin(915E6))
   {
     delay(2000);
