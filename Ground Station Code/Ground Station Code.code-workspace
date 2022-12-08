@@ -1,0 +1,23 @@
+{
+  "folders": [
+    {
+      "name": "Ground Station Code",
+      "path": "."
+    }
+  ],
+  "settings": {
+    "python.languageServer": "Pylance",
+    "circuitpython.board.version": "7.3.3",
+    "circuitpython.board.vid": "0x239A",
+    "circuitpython.board.pid": "0x80F4",
+    "python.linting.pylintEnabled": false,
+    "python.analysis.diagnosticSeverityOverrides": {
+      "reportMissingModuleSource": "none"
+    },
+    "python.analysis.extraPaths": [
+      "/Users/jaspercusiel/.vscode/extensions/joedevivo.vscode-circuitpython-0.1.19-darwin-arm64/boards/0x239A/0x80F4",
+      "/Users/jaspercusiel/.vscode/extensions/joedevivo.vscode-circuitpython-0.1.19-darwin-arm64/stubs",
+      "/Users/jaspercusiel/Library/Application Support/Code/User/globalStorage/joedevivo.vscode-circuitpython/bundle/20221130/adafruit-circuitpython-bundle-py-20221130/lib"
+    ]
+  }
+}
