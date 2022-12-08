@@ -4,6 +4,8 @@
 #include <RP2040_SD.h>
 #include <Adafruit_TinyUSB.h>
 #include <EEPROM.h>
+#include <LoRa.h>
+#include <RH_RF95.h>
 
 // Include Bitmap Images
 #include "Hundredths Needle.h"
@@ -42,6 +44,11 @@ RP2040_SdFile root;
 // Log file format
 char filename[] = "LOG000.CSV";
 
+// LoRa Setup
+#define RF95_CS 13
+#define RF95_INT 8
+#define RF95_RST 9
+#define RF95_FREQ 915.0
 // Variables
 const int upButtonPin = 2;
 const int downButtonPin = 3;
@@ -558,6 +565,10 @@ void start_usb_mass_storage()
     usb_msc.setUnitReady(true);
 }
 
+//====================================================================================
+//                                  Data Logging
+//====================================================================================
+
 void createDataLoggingFile()
 {
     EEPROM.begin(512);
@@ -586,6 +597,22 @@ void createDataLoggingFile()
     EEPROM.end();
 }
 
+void onReceive(int packetSize)
+{
+    // received a packet
+    Serial.print("Received packet '");
+
+    // read packet
+    for (int i = 0; i < packetSize; i++)
+    {
+        Serial.print((char)LoRa.read());
+    }
+
+    // print RSSI of packet
+    Serial.print("' with RSSI ");
+    Serial.println(LoRa.packetRssi());
+}
+
 //====================================================================================
 //                                    Setup
 //====================================================================================
@@ -602,6 +629,10 @@ void setup()
         }
     }
     Serial.begin(9600);
+    while (!Serial)
+    {
+        delay(10);
+    }
     tft.begin();
     tft.setRotation(1);
     tft.fillScreen(TFT_BLACK);
@@ -626,7 +657,23 @@ void setup()
     }
     Serial.println("Initialization done.");
     createDataLoggingFile();
-    // set SPI speed here to force 27Mhz (max display chip speed)
+
+    SPI1.setSCK(10);
+    SPI1.setCS(13);
+    SPI1.setRX(12);
+    SPI1.setTX(11);
+    // SPI1.begin();
+    //LoRa.setSPIFrequency(1E6);
+    LoRa.setSPI(SPI1);
+    LoRa.setPins(13, 9);
+    if (!LoRa.begin(915E6))
+    {
+        Serial.println("LoRa Initialization failed!");
+        return;
+    }
+    Serial.println("Initialization done.");
+
+    // set SPI speed here to force 27Mhz (max clock for ST7735 tft chip)
     SPI.beginTransaction(SPISettings(27000000, MSBFIRST, SPI_MODE0));
 }
 
