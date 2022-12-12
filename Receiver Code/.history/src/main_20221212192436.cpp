@@ -80,6 +80,7 @@ Adafruit_USBD_MSC usb_msc;
 Sd2Card card;
 RP2040_SdVolume volume;
 RP2040_SdFile root;
+File logfile;
 // Log file format
 char filename[] = "LOG000.CSV";
 
@@ -155,12 +156,13 @@ void start_usb_mass_storage()
 
 void createDataLoggingFile()
 {
+  delay(500);
   EEPROM.begin(512);
   // for (int i = 0; i < 512; i++)
   // {
   //     EEPROM.write(i, 0);
   // }
-  int fileNum = EEPROM.read(10);
+  int fileNum = EEPROM.read(0);
   Serial.println(fileNum);
   filename[3] = fileNum / 100 + '0';
   filename[4] = (fileNum % 100) / 10 + '0';
@@ -174,18 +176,18 @@ void createDataLoggingFile()
     filename[4] = (fileNum % 100) / 10 + '0';
     filename[5] = fileNum % 10 + '0';
     // create the new file
-    RP2040_SDLib::File logfile = SD.open(filename, FILE_WRITE);
-    fileNum++;                 // increment the file number
-    EEPROM.write(10, fileNum); // store the new file number in eeprom
+    logfile = SD.open(filename, FILE_WRITE);
+    fileNum++;                // increment the file number
+    EEPROM.write(0, fileNum); // store the new file number in eeprom
+    EEPROM.commit();
   }
   EEPROM.end();
-  digitalWrite(LED_GREEN, HIGH);
 }
 
 void logGPSData()
 {
-  File logfile = SD.open(filename, FILE_WRITE); // Open the log file
-  if (logfile)
+  logFile = SD.open(filename, FILE_WRITE); // Open the log file
+  if (logFile)
   {
     String dataString = "";
     dataString += ((String(GNSS.getHour()) + ":" + String(GNSS.getMinute()) + ":" + String(GNSS.getSecond()) + ":" + String(GNSS.getMillisecond())));
@@ -217,9 +219,9 @@ void logGPSData()
     dataString += String(lipo.getSOC(), 1);
     dataString += ',';
     dataString += String(lipo.getChangeRate(), 1);
-    logfile.print(dataString);
-    logfile.println();
-    logfile.close();
+    logFile.print(dataString);
+    logFile.println();
+    logFile.close();
     digitalWrite(LED_BLUE, LOW);
     // digitalWrite(LED_GREEN, HIGH);
   }
@@ -333,7 +335,7 @@ void setup()
     return;
   }
   Serial.println("Initialization done.");
-  createDataLoggingFile();
+  digitalWrite(LED_GREEN, HIGH);
 }
 void loop()
 {
@@ -348,7 +350,7 @@ void loop()
   }
   if (millis() - lastTime > 1000)
   {
-    // logGPSData();
+    logGPSData();
     lastTime = millis(); // Update the timer
   }
   // if (millis() - lastTime > 200)

@@ -16,11 +16,12 @@
 #include <RP2040_SD.h>
 #include "Adafruit_TinyUSB.h"
 
-const int chipSelect = 7;
+const int chipSelect = 10;
 
 Adafruit_USBD_MSC usb_msc;
+
 Sd2Card card;
-RP2040_SdVolume volume;
+SdVolume volume;
 
 // Callback invoked when received READ10 command.
 // Copy disk's data to buffer (up to bufsize) and
@@ -61,8 +62,7 @@ void setup()
   usb_msc.begin();
 
   Serial.begin(115200);
-  while (!Serial)
-    delay(10); // wait for native usb
+  // while ( !Serial ) delay(10);   // wait for native usb
 
   Serial.println("Adafruit TinyUSB Mass Storage SD Card example");
 

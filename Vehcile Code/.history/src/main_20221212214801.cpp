@@ -13,39 +13,16 @@
  */
 
 #include <Arduino.h>
-#include <RP2040_SD.h>
+#include "SD.h"
 #include "Adafruit_TinyUSB.h"
 
-const int chipSelect = 7;
+const int chipSelect = 10;
 
 Adafruit_USBD_MSC usb_msc;
+
 Sd2Card card;
-RP2040_SdVolume volume;
+SdVolume volume;
 
-// Callback invoked when received READ10 command.
-// Copy disk's data to buffer (up to bufsize) and
-// return number of copied bytes (must be multiple of block size)
-int32_t msc_read_cb(uint32_t lba, void *buffer, uint32_t bufsize)
-{
-  (void)bufsize;
-  return card.readBlock(lba, (uint8_t *)buffer) ? 512 : -1;
-}
-
-// Callback invoked when received WRITE10 command.
-// Process data in buffer to disk's storage and
-// return number of written bytes (must be multiple of block size)
-int32_t msc_write_cb(uint32_t lba, uint8_t *buffer, uint32_t bufsize)
-{
-  (void)bufsize;
-  return card.writeBlock(lba, buffer) ? 512 : -1;
-}
-
-// Callback invoked when WRITE10 command is completed (status received and accepted by host).
-// used to flush any pending cache.
-void msc_flush_cb(void)
-{
-  // nothing to do
-}
 // the setup function runs once when you press reset or power the board
 void setup()
 {
@@ -61,8 +38,7 @@ void setup()
   usb_msc.begin();
 
   Serial.begin(115200);
-  while (!Serial)
-    delay(10); // wait for native usb
+  // while ( !Serial ) delay(10);   // wait for native usb
 
   Serial.println("Adafruit TinyUSB Mass Storage SD Card example");
 
@@ -99,6 +75,31 @@ void setup()
 }
 
 void loop()
+{
+  // nothing to do
+}
+
+// Callback invoked when received READ10 command.
+// Copy disk's data to buffer (up to bufsize) and
+// return number of copied bytes (must be multiple of block size)
+int32_t msc_read_cb(uint32_t lba, void *buffer, uint32_t bufsize)
+{
+  (void)bufsize;
+  return card.readBlock(lba, (uint8_t *)buffer) ? 512 : -1;
+}
+
+// Callback invoked when received WRITE10 command.
+// Process data in buffer to disk's storage and
+// return number of written bytes (must be multiple of block size)
+int32_t msc_write_cb(uint32_t lba, uint8_t *buffer, uint32_t bufsize)
+{
+  (void)bufsize;
+  return card.writeBlock(lba, buffer) ? 512 : -1;
+}
+
+// Callback invoked when WRITE10 command is completed (status received and accepted by host).
+// used to flush any pending cache.
+void msc_flush_cb(void)
 {
   // nothing to do
 }

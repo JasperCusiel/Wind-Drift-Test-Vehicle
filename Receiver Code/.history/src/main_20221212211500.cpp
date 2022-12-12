@@ -70,11 +70,10 @@ const int ppsPin = 17;
 #define LOG_RATE 5000
 unsigned long lastLog = 0;
 // SD card setup
-#define SDCARD_SPI SPI1
-#define PIN_SD_MOSI 15
-#define PIN_SD_MISO 12
-#define PIN_SD_SCK 14
-#define PIN_SD_SS 9
+#define PIN_SD_MOSI PIN_SPI0_MOSI
+#define PIN_SD_MISO PIN_SPI0_MISO
+#define PIN_SD_SCK PIN_SPI0_SCK
+#define PIN_SD_SS 7
 // file name to use for writing
 Adafruit_USBD_MSC usb_msc;
 Sd2Card card;

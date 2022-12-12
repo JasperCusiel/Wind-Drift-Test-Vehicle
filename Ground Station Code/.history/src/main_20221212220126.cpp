@@ -608,45 +608,49 @@ void createDataLoggingFile()
 //====================================================================================
 void setup()
 {
-    pinMode(upButtonPin, INPUT_PULLUP);
-    int upButtonReading = digitalRead(upButtonPin);
+    start_usb_mass_storage();
+    while (1)
+    {
+    }
+    // pinMode(upButtonPin, INPUT_PULLUP);
+    // int upButtonReading = digitalRead(upButtonPin);
 
-    if (upButtonReading == LOW)
-    {
-        start_usb_mass_storage();
-        while (1)
-        {
-        }
-    }
-    Serial.begin(9600);
-    while (!Serial)
-    {
-        delay(10);
-    }
-    tft.begin();
-    tft.setRotation(1);
-    tft.fillScreen(TFT_BLACK);
-    // Create Sprites
-    createPageSprite();
-    createNeedleHundredth();
-    createNeedleThousandth();
-    createStatusBar();
-    createMessages();
-    createDirectionArrow();
-    createDataPanel();
-    // Setup Physical buttons
-    pinMode(downButtonPin, INPUT_PULLUP);
-    pinMode(leftButtonPin, INPUT_PULLUP);
-    pinMode(rightButtonPin, INPUT_PULLUP);
-    // Start SD card
+    // if (upButtonReading == LOW)
+    // {
+    //     start_usb_mass_storage();
+    //     while (1)
+    //     {
+    //     }
+    // }
+    // Serial.begin(9600);
+    // while (!Serial)
+    // {
+    //     delay(10);
+    // }
+    // tft.begin();
+    // tft.setRotation(1);
+    // tft.fillScreen(TFT_BLACK);
+    // // Create Sprites
+    // createPageSprite();
+    // createNeedleHundredth();
+    // createNeedleThousandth();
+    // createStatusBar();
+    // createMessages();
+    // createDirectionArrow();
+    // createDataPanel();
+    // // Setup Physical buttons
+    // pinMode(downButtonPin, INPUT_PULLUP);
+    // pinMode(leftButtonPin, INPUT_PULLUP);
+    // pinMode(rightButtonPin, INPUT_PULLUP);
+    // // Start SD card
 
-    if (!SD.begin(chipSelect))
-    {
-        Serial.println("Initialization failed!");
-        return;
-    }
-    Serial.println("Initialization done.");
-    createDataLoggingFile();
+    // if (!SD.begin(PIN_SD_SS))
+    // {
+    //     Serial.println("Initialization failed!");
+    //     return;
+    // }
+    // Serial.println("Initialization done.");
+    // createDataLoggingFile();
 
     // SPI1.setSCK(10);
     // SPI1.setCS(13);
@@ -663,8 +667,8 @@ void setup()
     // }
     // Serial.println("Initialization done.");
 
-    // set SPI speed here to force 27Mhz (max clock for ST7735 tft chip)
-    SPI.beginTransaction(SPISettings(27000000, MSBFIRST, SPI_MODE0));
+    // // set SPI speed here to force 27Mhz (max clock for ST7735 tft chip)
+    // SPI.beginTransaction(SPISettings(27000000, MSBFIRST, SPI_MODE0));
 }
 
 //====================================================================================

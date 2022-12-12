@@ -75,11 +75,11 @@ unsigned long lastLog = 0;
 #define PIN_SD_MISO 12
 #define PIN_SD_SCK 14
 #define PIN_SD_SS 9
-// file name to use for writing
+// SD card
+const int chipSelect = 7;
 Adafruit_USBD_MSC usb_msc;
 Sd2Card card;
 RP2040_SdVolume volume;
-RP2040_SdFile root;
 // Log file format
 char filename[] = "LOG000.CSV";
 
@@ -123,10 +123,23 @@ void start_usb_mass_storage()
   // If we don't initialize, board will be enumerated as CDC only
   usb_msc.setUnitReady(false);
   usb_msc.begin();
-  Serial.begin(9600);
 
-  if (!card.init(SPI_FULL_SPEED, PIN_SD_SS))
+  Serial.begin(115200);
+  while (!Serial)
+    delay(10); // wait for native usb
+
+  Serial.println("Adafruit TinyUSB Mass Storage SD Card example");
+
+  Serial.println("\nInitializing SD card...");
+
+  if (!card.init(SPI_HALF_SPEED, chipSelect))
   {
+    Serial.println("initialization failed. Things to check:");
+    Serial.println("* is a card inserted?");
+    Serial.println("* is your wiring correct?");
+    Serial.println("* did you change the chipSelect pin to match your shield or module?");
+    while (1)
+      delay(1);
   }
 
   // Now we will try to open the 'volume'/'partition' - it should be FAT16 or FAT32

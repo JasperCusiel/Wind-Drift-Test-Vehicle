@@ -4,6 +4,8 @@
 #include <RP2040_SD.h>
 #include <Adafruit_TinyUSB.h>
 #include <EEPROM.h>
+#include <LoRa.h>
+#include <RH_RF95.h>
 
 // Include Bitmap Images
 #include "Hundredths Needle.h"
@@ -30,10 +32,15 @@
 #define FONT_14PT robotoMono14
 
 // SD card setup
-const int chipSelect = 7;
+#define PIN_SD_MOSI PIN_SPI0_MOSI
+#define PIN_SD_MISO PIN_SPI0_MISO
+#define PIN_SD_SCK PIN_SPI0_SCK
+#define PIN_SD_SS 7
+// file name to use for writing
 Adafruit_USBD_MSC usb_msc;
 Sd2Card card;
 RP2040_SdVolume volume;
+RP2040_SdFile root;
 // Log file format
 char filename[] = "LOG000.CSV";
 
@@ -532,21 +539,15 @@ void start_usb_mass_storage()
     // If we don't initialize, board will be enumerated as CDC only
     usb_msc.setUnitReady(false);
     usb_msc.begin();
-
-    Serial.begin(115200);
+    Serial.begin(9600);
     while (!Serial)
-        delay(10); // wait for native usb
-
-    Serial.println("Adafruit TinyUSB Mass Storage SD Card example");
-
-    Serial.println("\nInitializing SD card...");
-
-    if (!card.init(SPI_HALF_SPEED, chipSelect))
     {
-        Serial.println("initialization failed. Things to check:");
-        Serial.println("* is a card inserted?");
-        Serial.println("* is your wiring correct?");
-        Serial.println("* did you change the chipSelect pin to match your shield or module?");
+        delay(10);
+    }
+
+    if (!card.init(SPI_FULL_SPEED, PIN_SD_SS))
+    {
+        Serial.println("Could not find card");
         while (1)
             delay(1);
     }
@@ -603,6 +604,22 @@ void createDataLoggingFile()
     EEPROM.end();
 }
 
+void onReceive(int packetSize)
+{
+    // received a packet
+    Serial.print("Received packet '");
+
+    // read packet
+    for (int i = 0; i < packetSize; i++)
+    {
+        Serial.print((char)LoRa.read());
+    }
+
+    // print RSSI of packet
+    Serial.print("' with RSSI ");
+    Serial.println(LoRa.packetRssi());
+}
+
 //====================================================================================
 //                                    Setup
 //====================================================================================
@@ -640,7 +657,7 @@ void setup()
     pinMode(rightButtonPin, INPUT_PULLUP);
     // Start SD card
 
-    if (!SD.begin(chipSelect))
+    if (!SD.begin(PIN_SD_SS))
     {
         Serial.println("Initialization failed!");
         return;
@@ -648,20 +665,20 @@ void setup()
     Serial.println("Initialization done.");
     createDataLoggingFile();
 
-    // SPI1.setSCK(10);
-    // SPI1.setCS(13);
-    // SPI1.setRX(12);
-    // SPI1.setTX(11);
-    // // SPI1.begin();
-    // // LoRa.setSPIFrequency(1E6);
-    // LoRa.setSPI(SPI1);
-    // LoRa.setPins(13, 9);
-    // if (!LoRa.begin(915E6))
-    // {
-    //     Serial.println("LoRa Initialization failed!");
-    //     return;
-    // }
-    // Serial.println("Initialization done.");
+    SPI1.setSCK(10);
+    SPI1.setCS(13);
+    SPI1.setRX(12);
+    SPI1.setTX(11);
+    // SPI1.begin();
+    // LoRa.setSPIFrequency(1E6);
+    LoRa.setSPI(SPI1);
+    LoRa.setPins(13, 9);
+    if (!LoRa.begin(915E6))
+    {
+        Serial.println("LoRa Initialization failed!");
+        return;
+    }
+    Serial.println("Initialization done.");
 
     // set SPI speed here to force 27Mhz (max clock for ST7735 tft chip)
     SPI.beginTransaction(SPISettings(27000000, MSBFIRST, SPI_MODE0));

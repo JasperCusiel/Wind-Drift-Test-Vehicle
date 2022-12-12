@@ -80,8 +80,9 @@ Adafruit_USBD_MSC usb_msc;
 Sd2Card card;
 RP2040_SdVolume volume;
 RP2040_SdFile root;
+File file;
 // Log file format
-char filename[] = "LOG000.CSV";
+char filename[11] = "LOG000.CSV";
 
 //====================================================================================
 //                                    SD card callbacks
@@ -155,37 +156,48 @@ void start_usb_mass_storage()
 
 void createDataLoggingFile()
 {
-  EEPROM.begin(512);
-  // for (int i = 0; i < 512; i++)
-  // {
-  //     EEPROM.write(i, 0);
-  // }
-  int fileNum = EEPROM.read(10);
-  Serial.println(fileNum);
-  filename[3] = fileNum / 100 + '0';
-  filename[4] = (fileNum % 100) / 10 + '0';
-  filename[5] = fileNum % 10 + '0';
-  if (!SD.exists(filename))
+  for (int i, i = 0; i < 100; i++)
   {
-    Serial.println("test");
-    // only open a new file if it doesn't exist
-    // generate a new file name
-    filename[3] = fileNum / 100 + '0';
-    filename[4] = (fileNum % 100) / 10 + '0';
-    filename[5] = fileNum % 10 + '0';
-    // create the new file
-    RP2040_SDLib::File logfile = SD.open(filename, FILE_WRITE);
-    fileNum++;                 // increment the file number
-    EEPROM.write(10, fileNum); // store the new file number in eeprom
+    filename[3] = i / 100 + '0';
+    filename[4] = (i % 100) / 10 + '0';
+    filename[5] = i % 10 + '0';
+    if (!SD.exists(filename))
+    {
+      break;
+    }
   }
-  EEPROM.end();
   digitalWrite(LED_GREEN, HIGH);
+  // EEPROM.begin(512);
+  // // for (int i = 0; i < 512; i++)
+  // // {
+  // //     EEPROM.write(i, 0);
+  // // }
+  // int fileNum = EEPROM.read(0);
+  // Serial.println(fileNum);
+  // filename[3] = fileNum / 100 + '0';
+  // filename[4] = (fileNum % 100) / 10 + '0';
+  // filename[5] = fileNum % 10 + '0';
+  // if (!SD.exists(filename))
+  // {
+  //   Serial.println("test");
+  //   // only open a new file if it doesn't exist
+  //   // generate a new file name
+  //   filename[3] = fileNum / 100 + '0';
+  //   filename[4] = (fileNum % 100) / 10 + '0';
+  //   filename[5] = fileNum % 10 + '0';
+  //   // create the new file
+  //   RP2040_SDLib::File logfile = SD.open(filename, FILE_WRITE);
+  //   fileNum++;                // increment the file number
+  //   EEPROM.write(0, fileNum); // store the new file number in eeprom
+  //   EEPROM.commit();
+  // }
+  // EEPROM.end();
 }
 
 void logGPSData()
 {
-  File logfile = SD.open(filename, FILE_WRITE); // Open the log file
-  if (logfile)
+  File logFile = SD.open(filename, FILE_WRITE); // Open the log file
+  if (logFile)
   {
     String dataString = "";
     dataString += ((String(GNSS.getHour()) + ":" + String(GNSS.getMinute()) + ":" + String(GNSS.getSecond()) + ":" + String(GNSS.getMillisecond())));
@@ -217,9 +229,9 @@ void logGPSData()
     dataString += String(lipo.getSOC(), 1);
     dataString += ',';
     dataString += String(lipo.getChangeRate(), 1);
-    logfile.print(dataString);
-    logfile.println();
-    logfile.close();
+    logFile.print(dataString);
+    logFile.println();
+    logFile.close();
     digitalWrite(LED_BLUE, LOW);
     // digitalWrite(LED_GREEN, HIGH);
   }
@@ -334,6 +346,7 @@ void setup()
   }
   Serial.println("Initialization done.");
   createDataLoggingFile();
+  file = SD.open(filename, FILE_WRITE);
 }
 void loop()
 {
@@ -348,7 +361,7 @@ void loop()
   }
   if (millis() - lastTime > 1000)
   {
-    // logGPSData();
+    logGPSData();
     lastTime = millis(); // Update the timer
   }
   // if (millis() - lastTime > 200)

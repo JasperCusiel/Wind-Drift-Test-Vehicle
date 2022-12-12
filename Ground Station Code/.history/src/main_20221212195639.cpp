@@ -30,18 +30,18 @@
 #define FONT_14PT robotoMono14
 
 // SD card setup
-const int chipSelect = 7;
+#define PIN_SD_MOSI PIN_SPI0_MOSI
+#define PIN_SD_MISO PIN_SPI0_MISO
+#define PIN_SD_SCK PIN_SPI0_SCK
+#define PIN_SD_SS 7
+// file name to use for writing
 Adafruit_USBD_MSC usb_msc;
 Sd2Card card;
 RP2040_SdVolume volume;
+RP2040_SdFile root;
 // Log file format
 char filename[] = "LOG000.CSV";
 
-// LoRa Setup
-#define RF95_CS 13
-#define RF95_INT 8
-#define RF95_RST 9
-#define RF95_FREQ 915.0
 // Variables
 const int upButtonPin = 2;
 const int downButtonPin = 3;
@@ -532,23 +532,10 @@ void start_usb_mass_storage()
     // If we don't initialize, board will be enumerated as CDC only
     usb_msc.setUnitReady(false);
     usb_msc.begin();
+    Serial.begin(9600);
 
-    Serial.begin(115200);
-    while (!Serial)
-        delay(10); // wait for native usb
-
-    Serial.println("Adafruit TinyUSB Mass Storage SD Card example");
-
-    Serial.println("\nInitializing SD card...");
-
-    if (!card.init(SPI_HALF_SPEED, chipSelect))
+    if (!card.init(SPI_FULL_SPEED, PIN_SD_SS))
     {
-        Serial.println("initialization failed. Things to check:");
-        Serial.println("* is a card inserted?");
-        Serial.println("* is your wiring correct?");
-        Serial.println("* did you change the chipSelect pin to match your shield or module?");
-        while (1)
-            delay(1);
     }
 
     // Now we will try to open the 'volume'/'partition' - it should be FAT16 or FAT32
@@ -570,10 +557,6 @@ void start_usb_mass_storage()
     // MSC is ready for read/write
     usb_msc.setUnitReady(true);
 }
-
-//====================================================================================
-//                                  Data Logging
-//====================================================================================
 
 void createDataLoggingFile()
 {
@@ -619,10 +602,6 @@ void setup()
         }
     }
     Serial.begin(9600);
-    while (!Serial)
-    {
-        delay(10);
-    }
     tft.begin();
     tft.setRotation(1);
     tft.fillScreen(TFT_BLACK);
@@ -640,30 +619,14 @@ void setup()
     pinMode(rightButtonPin, INPUT_PULLUP);
     // Start SD card
 
-    if (!SD.begin(chipSelect))
+    if (!SD.begin(PIN_SD_SS))
     {
         Serial.println("Initialization failed!");
         return;
     }
     Serial.println("Initialization done.");
     createDataLoggingFile();
-
-    // SPI1.setSCK(10);
-    // SPI1.setCS(13);
-    // SPI1.setRX(12);
-    // SPI1.setTX(11);
-    // // SPI1.begin();
-    // // LoRa.setSPIFrequency(1E6);
-    // LoRa.setSPI(SPI1);
-    // LoRa.setPins(13, 9);
-    // if (!LoRa.begin(915E6))
-    // {
-    //     Serial.println("LoRa Initialization failed!");
-    //     return;
-    // }
-    // Serial.println("Initialization done.");
-
-    // set SPI speed here to force 27Mhz (max clock for ST7735 tft chip)
+    // set SPI speed here to force 27Mhz (max display chip speed)
     SPI.beginTransaction(SPISettings(27000000, MSBFIRST, SPI_MODE0));
 }
 

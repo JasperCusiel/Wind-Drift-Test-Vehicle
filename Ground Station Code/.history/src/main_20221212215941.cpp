@@ -4,6 +4,8 @@
 #include <RP2040_SD.h>
 #include <Adafruit_TinyUSB.h>
 #include <EEPROM.h>
+#include <LoRa.h>
+#include <RH_RF95.h>
 
 // Include Bitmap Images
 #include "Hundredths Needle.h"
@@ -603,6 +605,22 @@ void createDataLoggingFile()
     EEPROM.end();
 }
 
+void onReceive(int packetSize)
+{
+    // received a packet
+    Serial.print("Received packet '");
+
+    // read packet
+    for (int i = 0; i < packetSize; i++)
+    {
+        Serial.print((char)LoRa.read());
+    }
+
+    // print RSSI of packet
+    Serial.print("' with RSSI ");
+    Serial.println(LoRa.packetRssi());
+}
+
 //====================================================================================
 //                                    Setup
 //====================================================================================
@@ -640,7 +658,7 @@ void setup()
     pinMode(rightButtonPin, INPUT_PULLUP);
     // Start SD card
 
-    if (!SD.begin(chipSelect))
+    if (!SD.begin(PIN_SD_SS))
     {
         Serial.println("Initialization failed!");
         return;
@@ -648,20 +666,20 @@ void setup()
     Serial.println("Initialization done.");
     createDataLoggingFile();
 
-    // SPI1.setSCK(10);
-    // SPI1.setCS(13);
-    // SPI1.setRX(12);
-    // SPI1.setTX(11);
-    // // SPI1.begin();
-    // // LoRa.setSPIFrequency(1E6);
-    // LoRa.setSPI(SPI1);
-    // LoRa.setPins(13, 9);
-    // if (!LoRa.begin(915E6))
-    // {
-    //     Serial.println("LoRa Initialization failed!");
-    //     return;
-    // }
-    // Serial.println("Initialization done.");
+    SPI1.setSCK(10);
+    SPI1.setCS(13);
+    SPI1.setRX(12);
+    SPI1.setTX(11);
+    // SPI1.begin();
+    // LoRa.setSPIFrequency(1E6);
+    LoRa.setSPI(SPI1);
+    LoRa.setPins(13, 9);
+    if (!LoRa.begin(915E6))
+    {
+        Serial.println("LoRa Initialization failed!");
+        return;
+    }
+    Serial.println("Initialization done.");
 
     // set SPI speed here to force 27Mhz (max clock for ST7735 tft chip)
     SPI.beginTransaction(SPISettings(27000000, MSBFIRST, SPI_MODE0));
