@@ -599,8 +599,8 @@ void createDataLoggingFile()
         filename[5] = fileNum % 10 + '0';
         // create the new file
         RP2040_SDLib::File logfile = SD.open(filename, FILE_WRITE);
-        fileNum++;                 // increment the file number
-        EEPROM.update(0, fileNum); // store the new file number in eeprom
+        fileNum++;                // increment the file number
+        EEPROM.write(0, fileNum); // store the new file number in eeprom
     }
     EEPROM.end();
 }

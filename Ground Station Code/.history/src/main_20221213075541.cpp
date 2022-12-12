@@ -4,6 +4,7 @@
 #include <RP2040_SD.h>
 #include <Adafruit_TinyUSB.h>
 #include <EEPROM.h>
+#include <SingleFileDrive.h>
 
 // Include Bitmap Images
 #include "Hundredths Needle.h"
@@ -572,12 +573,14 @@ void start_usb_mass_storage()
     // MSC is ready for read/write
     usb_msc.setUnitReady(true);
 }
+singleFile
 
-//====================================================================================
-//                                  Data Logging
-//====================================================================================
+    //====================================================================================
+    //                                  Data Logging
+    //====================================================================================
 
-void createDataLoggingFile()
+    void
+    createDataLoggingFile()
 {
     EEPROM.begin(512);
     // for (int i = 0; i < 512; i++)
@@ -599,8 +602,8 @@ void createDataLoggingFile()
         filename[5] = fileNum % 10 + '0';
         // create the new file
         RP2040_SDLib::File logfile = SD.open(filename, FILE_WRITE);
-        fileNum++;                 // increment the file number
-        EEPROM.update(0, fileNum); // store the new file number in eeprom
+        fileNum++;                // increment the file number
+        EEPROM.write(0, fileNum); // store the new file number in eeprom
     }
     EEPROM.end();
 }

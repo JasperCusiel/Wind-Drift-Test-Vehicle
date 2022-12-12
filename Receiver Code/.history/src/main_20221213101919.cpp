@@ -180,7 +180,7 @@ void createDataLoggingFile()
     logFile.print("Time UTC (H:M:S),Time Valid (0 = Invalid 1 = Valid),Longitude (DD°),Latitude (DD°),GPS Altitude (m),GPS Ground Speed (m/s),GPS Track Over Ground (deg°),Satellites In View, Fix Type (0 = No Fix 3 = 3D 4 = GNSS 5 = Time Fix), Primary Temperature (C°), Humidity (RH%), Altimeter Temperature (C°), Altitude Change (m), Battery Percentage, Battery Discharge Rate (%/h)");
     logFile.println();
     logFile.close();
-    fileNum++;                 // increment the file number
+    // fileNum++;                 // increment the file number
     EEPROM.update(0, fileNum); // store the new file number in eeprom
     digitalWrite(LED_GREEN, HIGH);
     fileCreated = true;
@@ -395,23 +395,17 @@ void loop()
       digitalWrite(LED_BLUE, LOW);
       createDataLoggingFile();
     }
-    if (digitalRead(ppsPin) == HIGH)
-    {
-      digitalWrite(LED_BLUE, HIGH);
-    }
     else
     {
-      digitalWrite(LED_BLUE, LOW);
-    }
-
-    if (millis() - lastTime > 1000)
-    {
-      if (!logGPSData())
+      if (millis() - lastTime > 1000)
       {
-        vehicleState = 2;
-        // not logging data
+        if (!logGPSData())
+        {
+          vehicleState = 2;
+          // not logging data
+        }
+        lastTime = millis(); // Update the timer
       }
-      lastTime = millis(); // Update the timer
     }
   }
   else

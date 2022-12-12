@@ -22,8 +22,6 @@ const int board_SDA = 6;
 const int board_SCL = 7;
 
 const int bootSelectButtonPin = 22;
-int vehicleState = 0; // 0 = charging mode, 1 = dataLogging, 2 = Error
-bool loggingData = false;
 
 // Status LED
 const int LED_GREEN = 26;
@@ -81,7 +79,6 @@ const int chipSelect = 7;
 Adafruit_USBD_MSC usb_msc;
 Sd2Card card;
 RP2040_SdVolume volume;
-bool fileCreated = false;
 // Log file format
 char filename[] = "LOG000.CSV";
 
@@ -177,29 +174,23 @@ void createDataLoggingFile()
     filename[5] = fileNum % 10 + '0';
     // create the new file
     RP2040_SDLib::File logFile = SD.open(filename, FILE_WRITE);
-    logFile.print("Time UTC (H:M:S),Time Valid (0 = Invalid 1 = Valid),Longitude (DD°),Latitude (DD°),GPS Altitude (m),GPS Ground Speed (m/s),GPS Track Over Ground (deg°),Satellites In View, Fix Type (0 = No Fix 3 = 3D 4 = GNSS 5 = Time Fix), Primary Temperature (C°), Humidity (RH%), Altimeter Temperature (C°), Altitude Change (m), Battery Percentage, Battery Discharge Rate (%/h)");
+    logFile.print("Time UTC (H:M:S),Time Valid (0 = invalid 1 = valid),Longitude (DD°),Latitude (DD°),GPS Altitude (m),GPS Ground Speed (m/s),GPS Track Over Ground (deg°),Satellites In View, Fix Type (0 = No Fix 3 = 3D 4 = GNSS 5 = Time Fix), Primary Temperature (C°), Humidity (RH%), Altimeter Temperature (C°), Altitude Change (m), Battery Percentage, Battery Discharge Rate (%/h)");
     logFile.println();
     logFile.close();
     fileNum++;                 // increment the file number
     EEPROM.update(0, fileNum); // store the new file number in eeprom
     digitalWrite(LED_GREEN, HIGH);
-    fileCreated = true;
-  }
-  else
-  {
-    vehicleState = 2;
-    fileCreated = false;
   }
   EEPROM.end();
 }
 
-bool logGPSData()
+void logGPSData()
 {
   File logFile = SD.open(filename, FILE_WRITE); // Open the log file
   if (logFile)
   {
     String dataString = "";
-    dataString += ((String(GNSS.getHour()) + ":" + String(GNSS.getMinute()) + ":" + String(GNSS.getSecond())));
+    dataString += ((String(GNSS.getHour()) + ":" + String(GNSS.getMinute()) + ":" + String(GNSS.getSecond()) + ":" + String(GNSS.getMillisecond())));
     dataString += ',';
     dataString += String(GNSS.getTimeValid());
     dataString += ',';
@@ -231,19 +222,20 @@ bool logGPSData()
     logFile.print(dataString);
     logFile.println();
     logFile.close();
-    return true;
+    digitalWrite(LED_BLUE, LOW);
+    // digitalWrite(LED_GREEN, HIGH);
   }
-  return false;
+  else
+  {
+    digitalWrite(LED_BLUE, LOW);
+    digitalWrite(LED_RED, HIGH);
+  }
 }
 
 void PowerDown()
 {
   pinMode(powerBtnSense, OUTPUT);
   digitalWrite(powerBtnSense, LOW);
-}
-
-void blinkLed()
-{
 }
 
 //====================================================================================
@@ -268,7 +260,6 @@ void setup()
     }
   }
   pinMode(powerBtnSense, INPUT_PULLUP);
-  digitalWrite(LED_RED, HIGH);
   digitalWrite(LED_BLUE, HIGH);
   Serial.begin(9600);
   while (!Serial)
@@ -340,7 +331,7 @@ void setup()
   }
 
   GNSS.setI2COutput(COM_TYPE_UBX);                 // Set the I2C port to output UBX only (turn off NMEA noise)
-  GNSS.setNavigationFrequency(1);                  // Set output to 10 times a second
+  GNSS.setNavigationFrequency(5);                  // Set output to 10 times a second
   GNSS.saveConfigSelective(VAL_CFG_SUBSEC_IOPORT); // Save (only) the communications port settings to flash and BBR
 
   // Start SD card
@@ -351,74 +342,187 @@ void setup()
     return;
   }
   Serial.println("Initialization done.");
-  digitalWrite(LED_RED, LOW);
-
-  // Interupts
-  // attachInterrupt(digitalPinToInterrupt(powerBtnSense), blinkLed, LOW);
+  createDataLoggingFile();
 }
 void loop()
 {
-  if (vehicleState == 0)
-  {
-    // Charging check for both button press
-    if (digitalRead(powerBtnSense) == LOW && digitalRead(bootSelectButtonPin) == LOW)
-    {
-      delay(50); // debounce buttons
-      if (digitalRead(powerBtnSense) == LOW && digitalRead(bootSelectButtonPin) == LOW)
-      {
-        vehicleState = 1;
-      }
-    }
-    unsigned long currentMillis = millis();
-    if (currentMillis - previousMillis >= 2000)
-    {
-      // save the last time you blinked the LED
-      previousMillis = currentMillis;
-      // if the LED is off turn it on and vice-versa:
-      if (ledState == LOW)
-      {
-        ledState = HIGH;
-      }
-      else
-      {
-        ledState = LOW;
-      }
-      digitalWrite(LED_BLUE, ledState);
-      digitalWrite(LED_GREEN, LOW);
-      digitalWrite(LED_RED, LOW);
-    }
-  }
-  else if (vehicleState == 1)
-  {
-    if (!fileCreated)
-    {
-      digitalWrite(LED_BLUE, LOW);
-      createDataLoggingFile();
-    }
-    if (digitalRead(ppsPin) == HIGH)
-    {
-      digitalWrite(LED_BLUE, HIGH);
-    }
-    else
-    {
-      digitalWrite(LED_BLUE, LOW);
-    }
 
-    if (millis() - lastTime > 1000)
-    {
-      if (!logGPSData())
-      {
-        vehicleState = 2;
-        // not logging data
-      }
-      lastTime = millis(); // Update the timer
-    }
+  if (digitalRead(ppsPin) == HIGH)
+  {
+    digitalWrite(LED_BLUE, HIGH);
   }
   else
   {
-    // error light red led
-    digitalWrite(LED_RED, HIGH);
     digitalWrite(LED_BLUE, LOW);
-    digitalWrite(LED_GREEN, LOW);
   }
+  if (millis() - lastTime > 1000)
+  {
+    // logGPSData();
+    lastTime = millis(); // Update the timer
+  }
+  // if (millis() - lastTime > 200)
+  // {
+  //   lastTime = millis(); // Update the timer
+
+  //   long latitude = GNSS.getLatitude();
+  //   Serial.print(F("Lat: "));
+  //   Serial.print(latitude);
+
+  //   long longitude = GNSS.getLongitude();
+  //   Serial.print(F(" Long: "));
+  //   Serial.print(longitude);
+  //   Serial.print(F(" (degrees * 10^-7)"));
+
+  //   long altitude = GNSS.getAltitude();
+  //   Serial.print(F(" Alt: "));
+  //   Serial.print(altitude);
+  //   Serial.print(F(" (mm)"));
+
+  //   byte SIV = GNSS.getSIV();
+  //   Serial.print(F(" SIV: "));
+  //   Serial.print(SIV);
+
+  //   Serial.println();
+  // }
+  // if (digitalRead(powerBtnSense) == LOW && powerPressedStartTime == 0)
+  // {
+  //   digitalWrite(LED_BLUE, LOW);
+  //   delay(debounceDelay);
+  //   if (digitalRead(powerBtnSense) == LOW)
+  //   {
+  //     powerPressedStartTime = millis();
+  //   }
+  // }
+  // else if (digitalRead(powerBtnSense) == LOW && powerPressedStartTime > 0)
+  // {
+  //   digitalWrite(LED_BLUE, LOW);
+  //   delay(debounceDelay);
+  //   if (digitalRead(powerBtnSense) == LOW)
+  //   {
+  //     unsigned long currentMillis = millis();
+  //     if (currentMillis - previousMillis >= 500)
+  //     {
+  //       // save the last time you blinked the LED
+  //       previousMillis = currentMillis;
+  //       // if the LED is off turn it on and vice-versa:
+  //       if (ledState == LOW)
+  //       {
+  //         ledState = HIGH;
+  //       }
+  //       else
+  //       {
+  //         ledState = LOW;
+  //       }
+  //       digitalWrite(LED_RED, ledState);
+  //     }
+  //     if ((millis() - powerPressedStartTime) > 2000)
+  //     {
+  //       PowerDown();
+  //     }
+  //   }
+  // }
+  // else if (digitalRead(powerBtnSense) == HIGH && powerPressedStartTime > 0)
+  // {
+  //   powerPressedStartTime = 0;
+  //   digitalWrite(LED_RED, LOW);
+  //   digitalWrite(LED_BLUE, HIGH);
+  // }
+
+  // if (millis() - lastTime > 1000)
+  // {
+  //   float temperature = altimeter.getTemperature();
+  //   float pressure = altimeter.getPressure();
+
+  //   Serial.print("Temperature=");
+  //   Serial.print(temperature, 1);
+  //   Serial.print("(C)");
+
+  //   Serial.print(" Pressure=");
+  //   Serial.print(pressure, 3);
+  //   Serial.print("(hPa or mbar)");
+
+  //   Serial.println();
+
+  //   // Print the variables : Serial.print("Voltage: ");
+  //   Serial.print(lipo.getVoltage()); // Print the battery voltage
+  //   Serial.print("V");
+
+  //   Serial.print(" Percentage: ");
+  //   Serial.print(lipo.getSOC(), 2); // Print the battery state of charge with 2 decimal places
+  //   Serial.print("%");
+
+  //   Serial.print(" Change Rate: ");
+  //   Serial.print(lipo.getChangeRate(), 2); // Print the battery change rate with 2 decimal places
+  //   Serial.print("%/hr");
+
+  //   Serial.print(" Alert: ");
+  //   Serial.print(lipo.getAlert()); // Print the generic alert flag
+
+  //   Serial.print(" Voltage High Alert: ");
+  //   Serial.print(lipo.isVoltageHigh()); // Print the alert flag
+
+  //   Serial.print(" Voltage Low Alert: ");
+  //   Serial.print(lipo.isVoltageLow()); // Print the alert flag
+
+  //   Serial.print(" Empty Alert: ");
+  //   Serial.print(lipo.isLow()); // Print the alert flag
+
+  //   Serial.print(" SOC 1% Change Alert: ");
+  //   Serial.print(lipo.isChange()); // Print the alert flag
+
+  //   Serial.print(" Hibernating: ");
+  //   Serial.print(lipo.isHibernating()); // Print the alert flag
+
+  //   Serial.println();
+  //   if (SHT30.readSample())
+  //   {
+  //     Serial.print("SHT:");
+  //     Serial.print("  RH: ");
+  //     Serial.print(SHT30.getHumidity(), 2);
+  //     Serial.print(" ");
+  //     Serial.print("  T:  ");
+  //     Serial.print(SHT30.getTemperature(), 2);
+  //     Serial.print(" ");
+  //   }
+  //   else
+  //   {
+  //     Serial.print("Error in readSample()\n");
+  //   }
+  //   lastTime = millis(); // Update the timer
+
+  //   long latitude = GNSS.getLatitude();
+  //   Serial.print(F("Lat: "));
+  //   Serial.print(latitude);
+
+  //   long longitude = GNSS.getLongitude();
+  //   Serial.print(F(" Long: "));
+  //   Serial.print(longitude);
+  //   Serial.print(F(" (degrees * 10^-7)"));
+
+  //   long altitude = GNSS.getAltitude();
+  //   Serial.print(F(" Alt: "));
+  //   Serial.print(altitude);
+  //   Serial.print(F(" (mm)"));
+
+  //   byte SIV = GNSS.getSIV();
+  //   Serial.print(F(" SIV: "));
+  //   Serial.print(SIV);
+
+  //   long speed = GNSS.getGroundSpeed();
+  //   Serial.print(F(" Speed: "));
+  //   Serial.print(speed);
+  //   Serial.print(F(" (mm/s)"));
+
+  //   long heading = GNSS.getHeading();
+  //   Serial.print(F(" Heading: "));
+  //   Serial.print(heading);
+  //   Serial.print(F(" (degrees * 10^-5)"));
+
+  //   int pDOP = GNSS.getPDOP();
+  //   Serial.print(F(" pDOP: "));
+  //   Serial.print(pDOP / 100.0, 2); // Convert pDOP scaling from 0.01 to 1
+
+  //   Serial.println(" ");
+  //   Serial.println(" ");
+  // }
 }

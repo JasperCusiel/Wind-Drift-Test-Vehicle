@@ -7,6 +7,7 @@
 #include <Adafruit_TinyUSB.h>
 #include <RP2040_SD.h>
 #include <EEPROM.h>
+#include <OneButton.h>
 
 #define DEBUGGING
 // RP2040 Board
@@ -23,7 +24,6 @@ const int board_SCL = 7;
 
 const int bootSelectButtonPin = 22;
 int vehicleState = 0; // 0 = charging mode, 1 = dataLogging, 2 = Error
-bool loggingData = false;
 
 // Status LED
 const int LED_GREEN = 26;
@@ -40,6 +40,7 @@ float startingPressure = 0.0;
 const int powerBtnSense = 16;
 long powerPressedStartTime = 0;
 int debounceDelay = 20;
+OneButton powerButton = OneButton(16, false, false);
 
 // MAX17048 Battery Fuel Gauge
 SFE_MAX1704X lipo(MAX1704X_MAX17048);
@@ -81,7 +82,6 @@ const int chipSelect = 7;
 Adafruit_USBD_MSC usb_msc;
 Sd2Card card;
 RP2040_SdVolume volume;
-bool fileCreated = false;
 // Log file format
 char filename[] = "LOG000.CSV";
 
@@ -183,17 +183,11 @@ void createDataLoggingFile()
     fileNum++;                 // increment the file number
     EEPROM.update(0, fileNum); // store the new file number in eeprom
     digitalWrite(LED_GREEN, HIGH);
-    fileCreated = true;
-  }
-  else
-  {
-    vehicleState = 2;
-    fileCreated = false;
   }
   EEPROM.end();
 }
 
-bool logGPSData()
+void logGPSData()
 {
   File logFile = SD.open(filename, FILE_WRITE); // Open the log file
   if (logFile)
@@ -231,9 +225,14 @@ bool logGPSData()
     logFile.print(dataString);
     logFile.println();
     logFile.close();
-    return true;
+    digitalWrite(LED_BLUE, LOW);
+    // digitalWrite(LED_GREEN, HIGH);
   }
-  return false;
+  else
+  {
+    digitalWrite(LED_BLUE, LOW);
+    digitalWrite(LED_RED, HIGH);
+  }
 }
 
 void PowerDown()
@@ -242,8 +241,54 @@ void PowerDown()
   digitalWrite(powerBtnSense, LOW);
 }
 
+void changeToDataLoggingState()
+{
+  vehicleState = 1;
+  Serial.print("double clicked");
+}
+
 void blinkLed()
 {
+  if (digitalRead(powerBtnSense) == LOW && powerPressedStartTime == 0)
+  {
+    digitalWrite(LED_BLUE, LOW);
+    digitalWrite(LED_GREEN, LOW);
+    delay(debounceDelay);
+    if (digitalRead(powerBtnSense) == LOW)
+    {
+      powerPressedStartTime = millis();
+    }
+  }
+  else if (digitalRead(powerBtnSense) == LOW && powerPressedStartTime > 0)
+  {
+    digitalWrite(LED_BLUE, LOW);
+    delay(debounceDelay);
+    if (digitalRead(powerBtnSense) == LOW)
+    {
+      unsigned long currentMillis = millis();
+      if (currentMillis - previousMillis >= 500)
+      {
+        // save the last time you blinked the LED
+        previousMillis = currentMillis;
+        // if the LED is off turn it on and vice-versa:
+        if (ledState == LOW)
+        {
+          ledState = HIGH;
+        }
+        else
+        {
+          ledState = LOW;
+        }
+        digitalWrite(LED_RED, ledState);
+        digitalWrite(LED_BLUE, LOW);
+        digitalWrite(LED_GREEN, LOW);
+      }
+      if ((millis() - powerPressedStartTime) > 2000)
+      {
+        PowerDown();
+      }
+    }
+  }
 }
 
 //====================================================================================
@@ -268,7 +313,6 @@ void setup()
     }
   }
   pinMode(powerBtnSense, INPUT_PULLUP);
-  digitalWrite(LED_RED, HIGH);
   digitalWrite(LED_BLUE, HIGH);
   Serial.begin(9600);
   while (!Serial)
@@ -340,7 +384,7 @@ void setup()
   }
 
   GNSS.setI2COutput(COM_TYPE_UBX);                 // Set the I2C port to output UBX only (turn off NMEA noise)
-  GNSS.setNavigationFrequency(1);                  // Set output to 10 times a second
+  GNSS.setNavigationFrequency(5);                  // Set output to 10 times a second
   GNSS.saveConfigSelective(VAL_CFG_SUBSEC_IOPORT); // Save (only) the communications port settings to flash and BBR
 
   // Start SD card
@@ -351,74 +395,31 @@ void setup()
     return;
   }
   Serial.println("Initialization done.");
-  digitalWrite(LED_RED, LOW);
 
   // Interupts
-  // attachInterrupt(digitalPinToInterrupt(powerBtnSense), blinkLed, LOW);
+  //attachInterrupt(digitalPinToInterrupt(powerBtnSense), blinkLed, LOW);
+  powerButton.attachDoubleClick(changeToDataLoggingState);
 }
 void loop()
 {
-  if (vehicleState == 0)
+  powerButton.tick();
+  if (vehicleState == 1)
   {
-    // Charging check for both button press
-    if (digitalRead(powerBtnSense) == LOW && digitalRead(bootSelectButtonPin) == LOW)
-    {
-      delay(50); // debounce buttons
-      if (digitalRead(powerBtnSense) == LOW && digitalRead(bootSelectButtonPin) == LOW)
-      {
-        vehicleState = 1;
-      }
-    }
-    unsigned long currentMillis = millis();
-    if (currentMillis - previousMillis >= 2000)
-    {
-      // save the last time you blinked the LED
-      previousMillis = currentMillis;
-      // if the LED is off turn it on and vice-versa:
-      if (ledState == LOW)
-      {
-        ledState = HIGH;
-      }
-      else
-      {
-        ledState = LOW;
-      }
-      digitalWrite(LED_BLUE, ledState);
-      digitalWrite(LED_GREEN, LOW);
-      digitalWrite(LED_RED, LOW);
-    }
+    createDataLoggingFile();
+    // if (millis() - lastTime > 1000)
+    // {
+    //   logGPSData();
+    //   lastTime = millis(); // Update the timer
+    // }
+    // else if (digitalRead(powerBtnSense) == HIGH && powerPressedStartTime > 0)
+    // {
+    //   powerPressedStartTime = 0;
+    //   digitalWrite(LED_RED, LOW);
+    // }
   }
-  else if (vehicleState == 1)
+  else if (vehicleState == 0)
   {
-    if (!fileCreated)
-    {
-      digitalWrite(LED_BLUE, LOW);
-      createDataLoggingFile();
-    }
-    if (digitalRead(ppsPin) == HIGH)
-    {
-      digitalWrite(LED_BLUE, HIGH);
-    }
-    else
-    {
-      digitalWrite(LED_BLUE, LOW);
-    }
-
-    if (millis() - lastTime > 1000)
-    {
-      if (!logGPSData())
-      {
-        vehicleState = 2;
-        // not logging data
-      }
-      lastTime = millis(); // Update the timer
-    }
-  }
-  else
-  {
-    // error light red led
-    digitalWrite(LED_RED, HIGH);
-    digitalWrite(LED_BLUE, LOW);
-    digitalWrite(LED_GREEN, LOW);
+    // charge mode
+    digitalWrite(LED_BLUE, HIGH);
   }
 }

@@ -22,8 +22,6 @@ const int board_SDA = 6;
 const int board_SCL = 7;
 
 const int bootSelectButtonPin = 22;
-int vehicleState = 0; // 0 = charging mode, 1 = dataLogging, 2 = Error
-bool loggingData = false;
 
 // Status LED
 const int LED_GREEN = 26;
@@ -81,7 +79,6 @@ const int chipSelect = 7;
 Adafruit_USBD_MSC usb_msc;
 Sd2Card card;
 RP2040_SdVolume volume;
-bool fileCreated = false;
 // Log file format
 char filename[] = "LOG000.CSV";
 
@@ -177,29 +174,23 @@ void createDataLoggingFile()
     filename[5] = fileNum % 10 + '0';
     // create the new file
     RP2040_SDLib::File logFile = SD.open(filename, FILE_WRITE);
-    logFile.print("Time UTC (H:M:S),Time Valid (0 = Invalid 1 = Valid),Longitude (DD°),Latitude (DD°),GPS Altitude (m),GPS Ground Speed (m/s),GPS Track Over Ground (deg°),Satellites In View, Fix Type (0 = No Fix 3 = 3D 4 = GNSS 5 = Time Fix), Primary Temperature (C°), Humidity (RH%), Altimeter Temperature (C°), Altitude Change (m), Battery Percentage, Battery Discharge Rate (%/h)");
+    logFile.print("Time UTC (H:M:S),Time Valid (0 = invalid 1 = valid),Longitude (DD°),Latitude (DD°),GPS Altitude (m),GPS Ground Speed (m/s),GPS Track Over Ground (deg°),Satellites In View, Fix Type (0 = No Fix 3 = 3D 4 = GNSS 5 = Time Fix), Primary Temperature (C°), Humidity (RH%), Altimeter Temperature (C°), Altitude Change (m), Battery Percentage, Battery Discharge Rate (%/h)");
     logFile.println();
     logFile.close();
     fileNum++;                 // increment the file number
     EEPROM.update(0, fileNum); // store the new file number in eeprom
     digitalWrite(LED_GREEN, HIGH);
-    fileCreated = true;
-  }
-  else
-  {
-    vehicleState = 2;
-    fileCreated = false;
   }
   EEPROM.end();
 }
 
-bool logGPSData()
+void logGPSData()
 {
   File logFile = SD.open(filename, FILE_WRITE); // Open the log file
   if (logFile)
   {
     String dataString = "";
-    dataString += ((String(GNSS.getHour()) + ":" + String(GNSS.getMinute()) + ":" + String(GNSS.getSecond())));
+    dataString += ((String(GNSS.getHour()) + ":" + String(GNSS.getMinute()) + ":" + String(GNSS.getSecond()) + ":" + String(GNSS.getMillisecond())));
     dataString += ',';
     dataString += String(GNSS.getTimeValid());
     dataString += ',';
@@ -231,9 +222,14 @@ bool logGPSData()
     logFile.print(dataString);
     logFile.println();
     logFile.close();
-    return true;
+    digitalWrite(LED_BLUE, LOW);
+    // digitalWrite(LED_GREEN, HIGH);
   }
-  return false;
+  else
+  {
+    digitalWrite(LED_BLUE, LOW);
+    digitalWrite(LED_RED, HIGH);
+  }
 }
 
 void PowerDown()
@@ -244,6 +240,45 @@ void PowerDown()
 
 void blinkLed()
 {
+  digitalWrite(LED_BLUE, LOW);
+  digitalWrite(LED_GREEN, LOW);
+  if (digitalRead(powerBtnSense) == LOW && powerPressedStartTime == 0)
+  {
+    digitalWrite(LED_BLUE, LOW);
+    delay(debounceDelay);
+    if (digitalRead(powerBtnSense) == LOW)
+    {
+      powerPressedStartTime = millis();
+    }
+  }
+  else if (digitalRead(powerBtnSense) == LOW && powerPressedStartTime > 0)
+  {
+    digitalWrite(LED_BLUE, LOW);
+    delay(debounceDelay);
+    if (digitalRead(powerBtnSense) == LOW)
+    {
+      unsigned long currentMillis = millis();
+      if (currentMillis - previousMillis >= 500)
+      {
+        // save the last time you blinked the LED
+        previousMillis = currentMillis;
+        // if the LED is off turn it on and vice-versa:
+        if (ledState == LOW)
+        {
+          ledState = HIGH;
+        }
+        else
+        {
+          ledState = LOW;
+        }
+        digitalWrite(LED_RED, ledState);
+      }
+      if ((millis() - powerPressedStartTime) > 2000)
+      {
+        PowerDown();
+      }
+    }
+  }
 }
 
 //====================================================================================
@@ -268,7 +303,6 @@ void setup()
     }
   }
   pinMode(powerBtnSense, INPUT_PULLUP);
-  digitalWrite(LED_RED, HIGH);
   digitalWrite(LED_BLUE, HIGH);
   Serial.begin(9600);
   while (!Serial)
@@ -340,7 +374,7 @@ void setup()
   }
 
   GNSS.setI2COutput(COM_TYPE_UBX);                 // Set the I2C port to output UBX only (turn off NMEA noise)
-  GNSS.setNavigationFrequency(1);                  // Set output to 10 times a second
+  GNSS.setNavigationFrequency(5);                  // Set output to 10 times a second
   GNSS.saveConfigSelective(VAL_CFG_SUBSEC_IOPORT); // Save (only) the communications port settings to flash and BBR
 
   // Start SD card
@@ -351,74 +385,32 @@ void setup()
     return;
   }
   Serial.println("Initialization done.");
-  digitalWrite(LED_RED, LOW);
+  createDataLoggingFile();
 
   // Interupts
-  // attachInterrupt(digitalPinToInterrupt(powerBtnSense), blinkLed, LOW);
+  attachInterrupt(digitalPinToInterrupt(powerBtnSense), blinkLed, LOW);
 }
 void loop()
 {
-  if (vehicleState == 0)
-  {
-    // Charging check for both button press
-    if (digitalRead(powerBtnSense) == LOW && digitalRead(bootSelectButtonPin) == LOW)
-    {
-      delay(50); // debounce buttons
-      if (digitalRead(powerBtnSense) == LOW && digitalRead(bootSelectButtonPin) == LOW)
-      {
-        vehicleState = 1;
-      }
-    }
-    unsigned long currentMillis = millis();
-    if (currentMillis - previousMillis >= 2000)
-    {
-      // save the last time you blinked the LED
-      previousMillis = currentMillis;
-      // if the LED is off turn it on and vice-versa:
-      if (ledState == LOW)
-      {
-        ledState = HIGH;
-      }
-      else
-      {
-        ledState = LOW;
-      }
-      digitalWrite(LED_BLUE, ledState);
-      digitalWrite(LED_GREEN, LOW);
-      digitalWrite(LED_RED, LOW);
-    }
-  }
-  else if (vehicleState == 1)
-  {
-    if (!fileCreated)
-    {
-      digitalWrite(LED_BLUE, LOW);
-      createDataLoggingFile();
-    }
-    if (digitalRead(ppsPin) == HIGH)
-    {
-      digitalWrite(LED_BLUE, HIGH);
-    }
-    else
-    {
-      digitalWrite(LED_BLUE, LOW);
-    }
 
-    if (millis() - lastTime > 1000)
-    {
-      if (!logGPSData())
-      {
-        vehicleState = 2;
-        // not logging data
-      }
-      lastTime = millis(); // Update the timer
-    }
+  if (digitalRead(ppsPin) == HIGH)
+  {
+    digitalWrite(LED_BLUE, HIGH);
   }
   else
   {
-    // error light red led
-    digitalWrite(LED_RED, HIGH);
     digitalWrite(LED_BLUE, LOW);
-    digitalWrite(LED_GREEN, LOW);
+  }
+  if (millis() - lastTime > 1000)
+  {
+    logGPSData();
+    lastTime = millis(); // Update the timer
+  }
+
+  if (digitalRead(powerBtnSense) == HIGH && powerPressedStartTime > 0)
+  {
+    powerPressedStartTime = 0;
+    digitalWrite(LED_RED, LOW);
+    digitalWrite(LED_BLUE, HIGH);
   }
 }

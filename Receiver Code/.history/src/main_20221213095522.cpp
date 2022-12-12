@@ -183,12 +183,6 @@ void createDataLoggingFile()
     fileNum++;                 // increment the file number
     EEPROM.update(0, fileNum); // store the new file number in eeprom
     digitalWrite(LED_GREEN, HIGH);
-    fileCreated = true;
-  }
-  else
-  {
-    vehicleState = 2;
-    fileCreated = false;
   }
   EEPROM.end();
 }
@@ -231,9 +225,14 @@ bool logGPSData()
     logFile.print(dataString);
     logFile.println();
     logFile.close();
+    digitalWrite(LED_BLUE, LOW);
+    // digitalWrite(LED_GREEN, HIGH);
     return true;
   }
-  return false;
+  else
+  {
+    vehicleState = 2; // error state
+  }
 }
 
 void PowerDown()
@@ -244,6 +243,46 @@ void PowerDown()
 
 void blinkLed()
 {
+  if (digitalRead(powerBtnSense) == LOW && powerPressedStartTime == 0)
+  {
+    digitalWrite(LED_BLUE, LOW);
+    digitalWrite(LED_GREEN, LOW);
+    delay(debounceDelay);
+    if (digitalRead(powerBtnSense) == LOW)
+    {
+      powerPressedStartTime = millis();
+    }
+  }
+  else if (digitalRead(powerBtnSense) == LOW && powerPressedStartTime > 0)
+  {
+    digitalWrite(LED_BLUE, LOW);
+    delay(debounceDelay);
+    if (digitalRead(powerBtnSense) == LOW)
+    {
+      unsigned long currentMillis = millis();
+      if (currentMillis - previousMillis >= 500)
+      {
+        // save the last time you blinked the LED
+        previousMillis = currentMillis;
+        // if the LED is off turn it on and vice-versa:
+        if (ledState == LOW)
+        {
+          ledState = HIGH;
+        }
+        else
+        {
+          ledState = LOW;
+        }
+        digitalWrite(LED_RED, ledState);
+        digitalWrite(LED_BLUE, LOW);
+        digitalWrite(LED_GREEN, LOW);
+      }
+      if ((millis() - powerPressedStartTime) > 2000)
+      {
+        PowerDown();
+      }
+    }
+  }
 }
 
 //====================================================================================
@@ -268,7 +307,6 @@ void setup()
     }
   }
   pinMode(powerBtnSense, INPUT_PULLUP);
-  digitalWrite(LED_RED, HIGH);
   digitalWrite(LED_BLUE, HIGH);
   Serial.begin(9600);
   while (!Serial)
@@ -340,7 +378,7 @@ void setup()
   }
 
   GNSS.setI2COutput(COM_TYPE_UBX);                 // Set the I2C port to output UBX only (turn off NMEA noise)
-  GNSS.setNavigationFrequency(1);                  // Set output to 10 times a second
+  GNSS.setNavigationFrequency(5);                  // Set output to 10 times a second
   GNSS.saveConfigSelective(VAL_CFG_SUBSEC_IOPORT); // Save (only) the communications port settings to flash and BBR
 
   // Start SD card
@@ -351,7 +389,6 @@ void setup()
     return;
   }
   Serial.println("Initialization done.");
-  digitalWrite(LED_RED, LOW);
 
   // Interupts
   // attachInterrupt(digitalPinToInterrupt(powerBtnSense), blinkLed, LOW);
@@ -370,6 +407,7 @@ void loop()
       }
     }
     unsigned long currentMillis = millis();
+    previousMillis = 0;
     if (currentMillis - previousMillis >= 2000)
     {
       // save the last time you blinked the LED
@@ -392,33 +430,60 @@ void loop()
   {
     if (!fileCreated)
     {
-      digitalWrite(LED_BLUE, LOW);
       createDataLoggingFile();
-    }
-    if (digitalRead(ppsPin) == HIGH)
-    {
-      digitalWrite(LED_BLUE, HIGH);
     }
     else
     {
-      digitalWrite(LED_BLUE, LOW);
-    }
-
-    if (millis() - lastTime > 1000)
-    {
-      if (!logGPSData())
+      if (millis() - lastTime > 1000)
       {
-        vehicleState = 2;
-        // not logging data
+        if (!logGPSData())
+        {
+          vehicleState = 2;
+          // not logging data
+        }
+        lastTime = millis(); // Update the timer
       }
-      lastTime = millis(); // Update the timer
     }
   }
   else
   {
     // error light red led
-    digitalWrite(LED_RED, HIGH);
+  }
+
+  digitalWrite(LED_BLUE, LOW);
+  unsigned long currentMillis = millis();
+  previousMillis = 0;
+  if (currentMillis - previousMillis >= 500)
+  {
+    // save the last time you blinked the LED
+    previousMillis = currentMillis;
+    // if the LED is off turn it on and vice-versa:
+    if (ledState == LOW)
+    {
+      ledState = HIGH;
+    }
+    else
+    {
+      ledState = LOW;
+    }
+    digitalWrite(LED_RED, ledState);
     digitalWrite(LED_BLUE, LOW);
     digitalWrite(LED_GREEN, LOW);
+  }
+  if ((millis() - powerPressedStartTime) > 2000)
+  {
+    PowerDown();
+  }
+  if (vehicleState == 1)
+  {
+    if (!fileCreated)
+    {
+      createDataLoggingFile();
+    }
+  }
+  else if (vehicleState == 0)
+  {
+    // charge mode
+    digitalWrite(LED_BLUE, HIGH);
   }
 }

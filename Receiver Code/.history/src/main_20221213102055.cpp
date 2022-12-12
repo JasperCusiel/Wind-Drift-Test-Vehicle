@@ -395,23 +395,17 @@ void loop()
       digitalWrite(LED_BLUE, LOW);
       createDataLoggingFile();
     }
-    if (digitalRead(ppsPin) == HIGH)
-    {
-      digitalWrite(LED_BLUE, HIGH);
-    }
     else
     {
-      digitalWrite(LED_BLUE, LOW);
-    }
-
-    if (millis() - lastTime > 1000)
-    {
-      if (!logGPSData())
+      if (millis() - lastTime > 1000)
       {
-        vehicleState = 2;
-        // not logging data
+        if (!logGPSData())
+        {
+          vehicleState = 2;
+          // not logging data
+        }
+        lastTime = millis(); // Update the timer
       }
-      lastTime = millis(); // Update the timer
     }
   }
   else
