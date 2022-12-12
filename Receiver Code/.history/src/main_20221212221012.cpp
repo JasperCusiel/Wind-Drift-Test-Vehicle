@@ -3,6 +3,7 @@
 #include <SparkFun_MS5637_Arduino_Library.h>
 #include <SparkFun_u-blox_GNSS_Arduino_Library.h>
 #include <SPI.h>
+#include <LoRa.h>
 #include <arduino-sht.h>
 #include <Adafruit_TinyUSB.h>
 #include <RP2040_SD.h>
@@ -74,11 +75,11 @@ unsigned long lastLog = 0;
 #define PIN_SD_MISO 12
 #define PIN_SD_SCK 14
 #define PIN_SD_SS 9
-// SD card setup
-const int chipSelect = 7;
+// file name to use for writing
 Adafruit_USBD_MSC usb_msc;
 Sd2Card card;
 RP2040_SdVolume volume;
+RP2040_SdFile root;
 // Log file format
 char filename[] = "LOG000.CSV";
 
@@ -154,11 +155,10 @@ void start_usb_mass_storage()
 
 void createDataLoggingFile()
 {
-  Serial.print("here"); 
-  EEPROM.begin(256);
+  EEPROM.begin(512);
   // for (int i = 0; i < 512; i++)
   // {
-  //   EEPROM.write(i, 0);
+  //     EEPROM.write(i, 0);
   // }
   int fileNum = EEPROM.read(0);
   Serial.println(fileNum);
@@ -177,8 +177,6 @@ void createDataLoggingFile()
     RP2040_SDLib::File logfile = SD.open(filename, FILE_WRITE);
     fileNum++;                // increment the file number
     EEPROM.write(0, fileNum); // store the new file number in eeprom
-    EEPROM.commit();
-    digitalWrite(LED_GREEN, HIGH);
   }
   EEPROM.end();
 }
@@ -260,11 +258,6 @@ void setup()
   }
   pinMode(powerBtnSense, INPUT_PULLUP);
   digitalWrite(LED_BLUE, HIGH);
-  Serial.begin(9600);
-  while (!Serial)
-  {
-    delay(10); // wait for native usb
-  }
   // I2C Initialization
   Wire1.setSDA(board_SDA);
   Wire1.setSCL(board_SCL);
@@ -282,8 +275,8 @@ void setup()
   SPI1.begin();
 
   // LoRa Initialization
-  // LoRa.setPins(RFM_CS, RFM_RST, RFM_IQR);
-  // LoRa.setSPI(SPI);
+  LoRa.setPins(RFM_CS, RFM_RST, RFM_IQR);
+  LoRa.setSPI(SPI);
   // while (!LoRa.begin(915E6))
   // {
   //   Serial.println("LoRa init falied !");
@@ -335,7 +328,7 @@ void setup()
 
   // Start SD card
 
-  if (!SD.begin(PIN_SD_SS))
+  if (!SD.begin(chipSelect))
   {
     Serial.println("Initialization failed!");
     return;

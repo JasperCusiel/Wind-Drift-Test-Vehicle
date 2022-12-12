@@ -154,7 +154,7 @@ void start_usb_mass_storage()
 
 void createDataLoggingFile()
 {
-  Serial.print("here"); 
+  Serial.print("here");
   EEPROM.begin(256);
   // for (int i = 0; i < 512; i++)
   // {

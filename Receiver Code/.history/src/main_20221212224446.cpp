@@ -154,7 +154,10 @@ void start_usb_mass_storage()
 
 void createDataLoggingFile()
 {
-  Serial.print("here"); 
+  while (!Serial)
+  {
+    delay(100); // wait for native usb
+  }
   EEPROM.begin(256);
   // for (int i = 0; i < 512; i++)
   // {
@@ -260,11 +263,6 @@ void setup()
   }
   pinMode(powerBtnSense, INPUT_PULLUP);
   digitalWrite(LED_BLUE, HIGH);
-  Serial.begin(9600);
-  while (!Serial)
-  {
-    delay(10); // wait for native usb
-  }
   // I2C Initialization
   Wire1.setSDA(board_SDA);
   Wire1.setSCL(board_SCL);

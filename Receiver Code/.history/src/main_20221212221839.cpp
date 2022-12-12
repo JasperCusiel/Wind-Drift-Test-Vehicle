@@ -154,8 +154,7 @@ void start_usb_mass_storage()
 
 void createDataLoggingFile()
 {
-  Serial.print("here"); 
-  EEPROM.begin(256);
+  EEPROM.begin(512);
   // for (int i = 0; i < 512; i++)
   // {
   //   EEPROM.write(i, 0);
@@ -177,7 +176,6 @@ void createDataLoggingFile()
     RP2040_SDLib::File logfile = SD.open(filename, FILE_WRITE);
     fileNum++;                // increment the file number
     EEPROM.write(0, fileNum); // store the new file number in eeprom
-    EEPROM.commit();
     digitalWrite(LED_GREEN, HIGH);
   }
   EEPROM.end();
@@ -260,11 +258,6 @@ void setup()
   }
   pinMode(powerBtnSense, INPUT_PULLUP);
   digitalWrite(LED_BLUE, HIGH);
-  Serial.begin(9600);
-  while (!Serial)
-  {
-    delay(10); // wait for native usb
-  }
   // I2C Initialization
   Wire1.setSDA(board_SDA);
   Wire1.setSCL(board_SCL);
