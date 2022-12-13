@@ -169,7 +169,7 @@ void createDataLoggingFile()
   filename[3] = fileNum / 100 + '0';
   filename[4] = (fileNum % 100) / 10 + '0';
   filename[5] = fileNum % 10 + '0';
-  if (!SD.exists("test1.csv"))
+  if (!SD.exists("test.csv"))
   {
     Serial.println("test");
     // only open a new file if it doesn't exist
@@ -178,7 +178,7 @@ void createDataLoggingFile()
     filename[4] = (fileNum % 100) / 10 + '0';
     filename[5] = fileNum % 10 + '0';
     // create the new file
-    File logFile = SD.open("test1.csv", FILE_WRITE);
+    File logFile = SD.open("test.csv", FILE_WRITE);
     logFile.print("Time UTC (H:M:S),Time Valid (0 = Invalid 1 = Valid),Longitude (DD°),Latitude (DD°),GPS Altitude (m),GPS Ground Speed (m/s),GPS Track Over Ground (deg°),Satellites In View, Fix Type (0 = No Fix 3 = 3D 4 = GNSS 5 = Time Fix), Primary Temperature (C°), Humidity (RH%), Altimeter Temperature (C°), Altitude Change (m), Battery Percentage, Battery Discharge Rate (%/h), timestamp");
     logFile.println();
     logFile.close();
@@ -196,7 +196,7 @@ void createDataLoggingFile()
 
 bool logGPSData()
 {
-  File logFile = SD.open("test1.csv", FILE_WRITE);
+  File logFile = SD.open("test.csv", FILE_WRITE);
   if (logFile)
   {
     bufferAvalible = false;
@@ -400,6 +400,7 @@ void loop()
     }
     lastTime = millis(); // Update the timer
   }
+  Serial.println(lastTime - time);
 }
 
 // if (loggingData)
@@ -492,4 +493,4 @@ void loop()
 //   //   digitalWrite(LED_RED, LOW);
 //   // }
 // }
-
+}

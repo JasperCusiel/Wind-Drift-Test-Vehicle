@@ -164,12 +164,12 @@ void createDataLoggingFile()
   // {
   //   EEPROM.write(i, 0);
   // }
-  int fileNum = 6;
+  int fileNum = EEPROM.read(0);
   Serial.println(fileNum);
   filename[3] = fileNum / 100 + '0';
   filename[4] = (fileNum % 100) / 10 + '0';
   filename[5] = fileNum % 10 + '0';
-  if (!SD.exists("test1.csv"))
+  if (!SD.exists(filename))
   {
     Serial.println("test");
     // only open a new file if it doesn't exist
@@ -178,7 +178,7 @@ void createDataLoggingFile()
     filename[4] = (fileNum % 100) / 10 + '0';
     filename[5] = fileNum % 10 + '0';
     // create the new file
-    File logFile = SD.open("test1.csv", FILE_WRITE);
+    File logFile = SD.open("LOG001", FILE_WRITE);
     logFile.print("Time UTC (H:M:S),Time Valid (0 = Invalid 1 = Valid),Longitude (DD°),Latitude (DD°),GPS Altitude (m),GPS Ground Speed (m/s),GPS Track Over Ground (deg°),Satellites In View, Fix Type (0 = No Fix 3 = 3D 4 = GNSS 5 = Time Fix), Primary Temperature (C°), Humidity (RH%), Altimeter Temperature (C°), Altitude Change (m), Battery Percentage, Battery Discharge Rate (%/h), timestamp");
     logFile.println();
     logFile.close();
@@ -196,7 +196,7 @@ void createDataLoggingFile()
 
 bool logGPSData()
 {
-  File logFile = SD.open("test1.csv", FILE_WRITE);
+  File logFile = SD.open("LOG001", FILE_WRITE);
   if (logFile)
   {
     bufferAvalible = false;
@@ -268,7 +268,7 @@ void setup()
     {
     }
   }
-  // pinMode(powerBtnSense, INPUT_PULLUP);
+  //pinMode(powerBtnSense, INPUT_PULLUP);
   digitalWrite(LED_BLUE, HIGH);
   Serial.begin(9600);
   // I2C Initialization
@@ -379,10 +379,6 @@ void loop1()
 
 void loop()
 {
-  if (!fileCreated)
-  {
-    createDataLoggingFile();
-  }
   if (millis() - lastTime > 1000)
   {
     int time = millis();
@@ -399,97 +395,97 @@ void loop()
       digitalWrite(LED_BLUE, LOW);
     }
     lastTime = millis(); // Update the timer
+    Serial.println(lastTime - time);
   }
+
+  // if (loggingData)
+  // {
+  //   if (!fileCreated)
+  //   {
+  //     createDataLoggingFile();
+  //   }
+  //   else if (logGPSData())
+  //   {
+  //     digitalWrite(LED_RED, LOW);
+  //     digitalWrite(LED_GREEN, HIGH);
+  //     digitalWrite(LED_BLUE, LOW);
+  //   }
+  //   else
+  //   {
+  //     digitalWrite(LED_RED, HIGH);
+  //     digitalWrite(LED_GREEN, LOW);
+  //     digitalWrite(LED_BLUE, LOW);
+  //   }
+  // }
+  // else
+  // {
+  //   int powerButtonState = digitalRead(powerBtnSense);
+  //   int bootButtonState = digitalRead(bootSelectButtonPin);
+  //   if (powerButtonState == LOW && powerBtnSense == LOW)
+  //   {
+  //     loggingData = true;
+  //   }
+  // }
+  // if (vehicleState == 1)
+  // {
+  //   if (!fileCreated)
+  //   {
+  //     digitalWrite(LED_BLUE, LOW);
+  //     createDataLoggingFile();
+  //   }
+
+  //   if (millis() - lastTime > 1000)
+  //   {
+  //     int time = millis();
+  //     if (!logGPSData())
+  //     {
+  //       vehicleState = 2;
+  //       // not logging data
+  //     }
+  //     else
+  //     {
+  //       digitalWrite(LED_GREEN, HIGH);
+  //     }
+  //     lastTime = millis(); // Update the timer
+  //     Serial.println(lastTime - time);
+  //   }
+  // }
+  // if (vehicleState == 0)
+  // {
+  //   // Charging check for both button press
+  //   if ((digitalRead(powerBtnSense) == LOW) && (digitalRead(bootSelectButtonPin) == LOW))
+  //   {
+  //     vehicleState = 1;
+  //     digitalWrite(LED_BLUE, LOW);
+  //     digitalWrite(LED_GREEN, LOW);
+  //     digitalWrite(LED_RED, LOW);
+  //   }
+  //   if (lipo.getSOC() < 100)
+  //   {
+  //     unsigned long currentMillis = millis();
+  //     if (currentMillis - previousMillis >= 2000)
+  //     {
+  //       // save the last time you blinked the LED
+  //       previousMillis = currentMillis;
+  //       // if the LED is off turn it on and vice-versa:
+  //       if (ledState == LOW)
+  //       {
+  //         ledState = HIGH;
+  //       }
+  //       else
+  //       {
+  //         ledState = LOW;
+  //       }
+  //       digitalWrite(LED_BLUE, ledState);
+  //       digitalWrite(LED_GREEN, LOW);
+  //       digitalWrite(LED_RED, ledState);
+  //     }
+  //   }
+  //   // else
+  //   // {
+  //   //   digitalWrite(LED_BLUE, HIGH);
+  //   //   digitalWrite(LED_GREEN, LOW);
+  //   //   digitalWrite(LED_RED, LOW);
+  //   // }
+  // }
 }
-
-// if (loggingData)
-// {
-//   if (!fileCreated)
-//   {
-//     createDataLoggingFile();
-//   }
-//   else if (logGPSData())
-//   {
-//     digitalWrite(LED_RED, LOW);
-//     digitalWrite(LED_GREEN, HIGH);
-//     digitalWrite(LED_BLUE, LOW);
-//   }
-//   else
-//   {
-//     digitalWrite(LED_RED, HIGH);
-//     digitalWrite(LED_GREEN, LOW);
-//     digitalWrite(LED_BLUE, LOW);
-//   }
-// }
-// else
-// {
-//   int powerButtonState = digitalRead(powerBtnSense);
-//   int bootButtonState = digitalRead(bootSelectButtonPin);
-//   if (powerButtonState == LOW && powerBtnSense == LOW)
-//   {
-//     loggingData = true;
-//   }
-// }
-// if (vehicleState == 1)
-// {
-//   if (!fileCreated)
-//   {
-//     digitalWrite(LED_BLUE, LOW);
-//     createDataLoggingFile();
-//   }
-
-//   if (millis() - lastTime > 1000)
-//   {
-//     int time = millis();
-//     if (!logGPSData())
-//     {
-//       vehicleState = 2;
-//       // not logging data
-//     }
-//     else
-//     {
-//       digitalWrite(LED_GREEN, HIGH);
-//     }
-//     lastTime = millis(); // Update the timer
-//     Serial.println(lastTime - time);
-//   }
-// }
-// if (vehicleState == 0)
-// {
-//   // Charging check for both button press
-//   if ((digitalRead(powerBtnSense) == LOW) && (digitalRead(bootSelectButtonPin) == LOW))
-//   {
-//     vehicleState = 1;
-//     digitalWrite(LED_BLUE, LOW);
-//     digitalWrite(LED_GREEN, LOW);
-//     digitalWrite(LED_RED, LOW);
-//   }
-//   if (lipo.getSOC() < 100)
-//   {
-//     unsigned long currentMillis = millis();
-//     if (currentMillis - previousMillis >= 2000)
-//     {
-//       // save the last time you blinked the LED
-//       previousMillis = currentMillis;
-//       // if the LED is off turn it on and vice-versa:
-//       if (ledState == LOW)
-//       {
-//         ledState = HIGH;
-//       }
-//       else
-//       {
-//         ledState = LOW;
-//       }
-//       digitalWrite(LED_BLUE, ledState);
-//       digitalWrite(LED_GREEN, LOW);
-//       digitalWrite(LED_RED, ledState);
-//     }
-//   }
-//   // else
-//   // {
-//   //   digitalWrite(LED_BLUE, HIGH);
-//   //   digitalWrite(LED_GREEN, LOW);
-//   //   digitalWrite(LED_RED, LOW);
-//   // }
-// }
-

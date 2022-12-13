@@ -160,16 +160,16 @@ void start_usb_mass_storage()
 void createDataLoggingFile()
 {
   EEPROM.begin(256);
-  // for (int i = 0; i < 512; i++)
-  // {
-  //   EEPROM.write(i, 0);
-  // }
-  int fileNum = 6;
+  for (int i = 0; i < 256; i++)
+  {
+    EEPROM.write(i, 0);
+  }
+  int fileNum = EEPROM.read(0);
   Serial.println(fileNum);
   filename[3] = fileNum / 100 + '0';
   filename[4] = (fileNum % 100) / 10 + '0';
   filename[5] = fileNum % 10 + '0';
-  if (!SD.exists("test1.csv"))
+  if (!SD.exists(filename))
   {
     Serial.println("test");
     // only open a new file if it doesn't exist
@@ -178,7 +178,7 @@ void createDataLoggingFile()
     filename[4] = (fileNum % 100) / 10 + '0';
     filename[5] = fileNum % 10 + '0';
     // create the new file
-    File logFile = SD.open("test1.csv", FILE_WRITE);
+    File logFile = SD.open(filename, FILE_WRITE);
     logFile.print("Time UTC (H:M:S),Time Valid (0 = Invalid 1 = Valid),Longitude (DD°),Latitude (DD°),GPS Altitude (m),GPS Ground Speed (m/s),GPS Track Over Ground (deg°),Satellites In View, Fix Type (0 = No Fix 3 = 3D 4 = GNSS 5 = Time Fix), Primary Temperature (C°), Humidity (RH%), Altimeter Temperature (C°), Altitude Change (m), Battery Percentage, Battery Discharge Rate (%/h), timestamp");
     logFile.println();
     logFile.close();
@@ -196,7 +196,7 @@ void createDataLoggingFile()
 
 bool logGPSData()
 {
-  File logFile = SD.open("test1.csv", FILE_WRITE);
+  File logFile = SD.open(filename, FILE_WRITE);
   if (logFile)
   {
     bufferAvalible = false;
@@ -254,21 +254,21 @@ bool logGPSData()
 void setup()
 {
   rp2040.idleOtherCore();
-  pinMode(LED_BLUE, OUTPUT);
-  pinMode(LED_RED, OUTPUT);
-  pinMode(LED_GREEN, OUTPUT);
   pinMode(bootSelectButtonPin, INPUT_PULLUP);
   int bootButtonReading = digitalRead(bootSelectButtonPin);
+  pinMode(LED_BLUE, OUTPUT);
+  pinMode(LED_GREEN, OUTPUT);
   if (bootButtonReading == LOW)
   {
     start_usb_mass_storage();
-    digitalWrite(LED_GREEN, HIGH);
-    digitalWrite(LED_RED, HIGH);
     while (1)
     {
+      digitalWrite(LED_GREEN, HIGH);
+      digitalWrite(LED_BLUE, HIGH);
     }
   }
-  // pinMode(powerBtnSense, INPUT_PULLUP);
+  pinMode(LED_RED, OUTPUT);
+  pinMode(powerBtnSense, INPUT_PULLUP);
   digitalWrite(LED_BLUE, HIGH);
   Serial.begin(9600);
   // I2C Initialization
@@ -299,39 +299,48 @@ void setup()
   {
     Serial.println(F("MAX17048 not detected."));
   }
+  // lipo.quickStart();
   lipo.setThreshold(20);
 
   // SHT30 Temperature and Humidity Sensor Initalization
+
   while (!SHT30.init(Wire1))
   {
     Serial.print("SHT30 error");
   }
 
   // GPS setup
+  // myGNSS.enableDebugging(); // Uncomment this line to enable debug messages
+
   if (GNSS.begin(Wire1) == false) // Connect to the u-blox module using Wire port
   {
     Serial.println(F("u-blox GNSS not detected at default I2C address. Please check wiring. Freezing."));
     while (1)
       ;
   }
+
   GNSS.setI2COutput(COM_TYPE_UBX);                 // Set the I2C port to output UBX only (turn off NMEA noise)
   GNSS.setNavigationFrequency(5);                  // Set output to 10 times a second
   GNSS.saveConfigSelective(VAL_CFG_SUBSEC_IOPORT); // Save (only) the communications port settings to flash and BBR
 
   // Start SD card
+
   if (!SD.begin(PIN_SD_SS))
   {
     Serial.println("Initialization failed!");
     return;
   }
   Serial.println("Initialization done.");
-  digitalWrite(LED_BLUE, LOW);
   dataBuffer.reserve(1024);
   rp2040.resumeOtherCore();
 }
 
 void setup1()
 {
+  // while (!Serial)
+  // {
+  //   delay(10); // wait for native usb
+  // }
   // SPI Initialization
   SPI.setRX(board_SPI_RX);
   SPI.setTX(board_SPI_TX);
@@ -347,7 +356,6 @@ void setup1()
     return;
   }
   Serial.println("LoRa init");
-  createDataLoggingFile();
 }
 
 void loop1()
@@ -379,117 +387,69 @@ void loop1()
 
 void loop()
 {
-  if (!fileCreated)
+  if (vehicleState == 0)
   {
-    createDataLoggingFile();
+    // Charging check for both button press
+    if (((digitalRead(bootSelectButtonPin) == LOW) || digitalRead(powerBtnSense) == LOW))
+    {
+      delay(20); // debounce buttons
+      if (((digitalRead(bootSelectButtonPin) == LOW) && digitalRead(powerBtnSense) == LOW))
+      {
+        vehicleState = 1;
+        digitalWrite(LED_BLUE, LOW);
+        digitalWrite(LED_GREEN, LOW);
+        digitalWrite(LED_RED, LOW);
+      }
+    }
+    unsigned long currentMillis = millis();
+    if (currentMillis - previousMillis >= 2000)
+    {
+      // save the last time you blinked the LED
+      previousMillis = currentMillis;
+      // if the LED is off turn it on and vice-versa:
+      if (ledState == LOW)
+      {
+        ledState = HIGH;
+      }
+      else
+      {
+        ledState = LOW;
+      }
+      if (lipo.getSOC() < 100)
+      {
+        digitalWrite(LED_BLUE, ledState);
+        digitalWrite(LED_GREEN, ledState);
+      }
+      digitalWrite(LED_BLUE, ledState);
+    }
+    // Serial.println(lipo.getSOC());
   }
-  if (millis() - lastTime > 1000)
+  if (vehicleState == 1)
   {
-    int time = millis();
-    if (logGPSData())
+    if (!fileCreated)
     {
-      digitalWrite(LED_GREEN, HIGH);
-      digitalWrite(LED_RED, LOW);
-      digitalWrite(LED_BLUE, LOW);
+      createDataLoggingFile();
     }
-    else
+    if (millis() - lastTime > 1000)
     {
-      digitalWrite(LED_RED, HIGH);
-      digitalWrite(LED_GREEN, LOW);
-      digitalWrite(LED_BLUE, LOW);
+      int time = millis();
+      if (!logGPSData())
+      {
+        fileCreated = false;
+      }
+      else
+      {
+        digitalWrite(LED_BLUE, LOW);
+        digitalWrite(LED_GREEN, HIGH);
+      }
+      lastTime = millis(); // Update the timer
     }
-    lastTime = millis(); // Update the timer
+  }
+  else
+  {
+    // error light red led
+    digitalWrite(LED_RED, HIGH);
+    digitalWrite(LED_BLUE, LOW);
+    digitalWrite(LED_GREEN, LOW);
   }
 }
-
-// if (loggingData)
-// {
-//   if (!fileCreated)
-//   {
-//     createDataLoggingFile();
-//   }
-//   else if (logGPSData())
-//   {
-//     digitalWrite(LED_RED, LOW);
-//     digitalWrite(LED_GREEN, HIGH);
-//     digitalWrite(LED_BLUE, LOW);
-//   }
-//   else
-//   {
-//     digitalWrite(LED_RED, HIGH);
-//     digitalWrite(LED_GREEN, LOW);
-//     digitalWrite(LED_BLUE, LOW);
-//   }
-// }
-// else
-// {
-//   int powerButtonState = digitalRead(powerBtnSense);
-//   int bootButtonState = digitalRead(bootSelectButtonPin);
-//   if (powerButtonState == LOW && powerBtnSense == LOW)
-//   {
-//     loggingData = true;
-//   }
-// }
-// if (vehicleState == 1)
-// {
-//   if (!fileCreated)
-//   {
-//     digitalWrite(LED_BLUE, LOW);
-//     createDataLoggingFile();
-//   }
-
-//   if (millis() - lastTime > 1000)
-//   {
-//     int time = millis();
-//     if (!logGPSData())
-//     {
-//       vehicleState = 2;
-//       // not logging data
-//     }
-//     else
-//     {
-//       digitalWrite(LED_GREEN, HIGH);
-//     }
-//     lastTime = millis(); // Update the timer
-//     Serial.println(lastTime - time);
-//   }
-// }
-// if (vehicleState == 0)
-// {
-//   // Charging check for both button press
-//   if ((digitalRead(powerBtnSense) == LOW) && (digitalRead(bootSelectButtonPin) == LOW))
-//   {
-//     vehicleState = 1;
-//     digitalWrite(LED_BLUE, LOW);
-//     digitalWrite(LED_GREEN, LOW);
-//     digitalWrite(LED_RED, LOW);
-//   }
-//   if (lipo.getSOC() < 100)
-//   {
-//     unsigned long currentMillis = millis();
-//     if (currentMillis - previousMillis >= 2000)
-//     {
-//       // save the last time you blinked the LED
-//       previousMillis = currentMillis;
-//       // if the LED is off turn it on and vice-versa:
-//       if (ledState == LOW)
-//       {
-//         ledState = HIGH;
-//       }
-//       else
-//       {
-//         ledState = LOW;
-//       }
-//       digitalWrite(LED_BLUE, ledState);
-//       digitalWrite(LED_GREEN, LOW);
-//       digitalWrite(LED_RED, ledState);
-//     }
-//   }
-//   // else
-//   // {
-//   //   digitalWrite(LED_BLUE, HIGH);
-//   //   digitalWrite(LED_GREEN, LOW);
-//   //   digitalWrite(LED_RED, LOW);
-//   // }
-// }
-
