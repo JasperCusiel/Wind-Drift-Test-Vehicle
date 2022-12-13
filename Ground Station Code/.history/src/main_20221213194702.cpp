@@ -380,7 +380,7 @@ void drawLayout(int batteryPercentage, int rssi, bool transmitting, bool receivi
      * @param humidity SHT30 humidity in RH
      */
     drawStatusBar(batteryPercentage, rssi, transmitting, receiving);
-    drawDataPanel(heading, temp, humidity, velocity);
+    drawDataPanel(vehicleHeading, temp, humidity, velocity);
     drawMessages();
     tft.drawLine(0, 20, 108, 20, TFT_WHITE);
 }
@@ -803,9 +803,11 @@ void loop()
 
     testLat += 0.1;
     testLong += 0.1;
+    // testReceive = !testReceive;
+    // testSend = !testSend;
     testHeading++;
-    testAltitude++;
-    drawLayout(100, -60, testSend, testReceive, testHeading, 13.5, 20, 100);
+    testAltitude += 1;
+    drawLayout(100, -120, testSend, testReceive, testHeading, 13.5, -20, 100);
     if (pageNum == 0)
     {
         drawAltimeterPage(testAltitude);

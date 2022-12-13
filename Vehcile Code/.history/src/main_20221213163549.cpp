@@ -31,7 +31,6 @@ void setup()
   // LoRa Initialization
   LoRa.setPins(RFM_CS, RFM_RST, RFM_IQR);
   LoRa.setSPI(SPI);
-  LoRa.dumpRegisters(Serial);
   while (!LoRa.begin(915E6))
   {
     Serial.println("LoRa init falied !");

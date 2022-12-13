@@ -52,13 +52,9 @@ float batteryPercentage = 100.0;
 float vehicleHeading = 0.0;
 int count = 0;
 int tick = 0;
-int pageNum = 0;
+int pageNum = 2;
 float testLat = -90.0000;
 float testLong = -180.0000;
-bool testSend = false;
-bool testReceive = true;
-int testHeading = 0;
-int testAltitude = 0;
 
 // data transfer page variables
 int transferDataState;
@@ -380,7 +376,7 @@ void drawLayout(int batteryPercentage, int rssi, bool transmitting, bool receivi
      * @param humidity SHT30 humidity in RH
      */
     drawStatusBar(batteryPercentage, rssi, transmitting, receiving);
-    drawDataPanel(heading, temp, humidity, velocity);
+    drawDataPanel(vehicleHeading, temp, humidity, velocity);
     drawMessages();
     tft.drawLine(0, 20, 108, 20, TFT_WHITE);
 }
@@ -626,10 +622,10 @@ void setup()
         }
     }
     Serial.begin(9600);
-    // while (!Serial)
-    // {
-    //     delay(10);
-    // }
+    while (!Serial)
+    {
+        delay(10);
+    }
     tft.begin();
     tft.setRotation(1);
     tft.fillScreen(TFT_BLACK);
@@ -754,64 +750,66 @@ void loop()
     }
     downButtonLastState = downButtonReading;
 
-    // // left button
-    // int leftButtonReading = digitalRead(leftButtonPin);
-    // if (leftButtonReading != leftButtonLastState)
-    // {
-    //     lastDebounceTimeLeftBtn = millis();
-    //     leftButtonPressed = false;
-    // }
+    // left button
+    int leftButtonReading = digitalRead(leftButtonPin);
+    if (leftButtonReading != leftButtonLastState)
+    {
+        lastDebounceTimeLeftBtn = millis();
+        leftButtonPressed = false;
+    }
 
-    // if ((millis() - lastDebounceTimeLeftBtn) > debounceDelay)
-    // {
-    //     if (leftButtonReading != leftButtonState)
-    //     {
-    //         leftButtonState = leftButtonReading;
-    //         if (leftButtonState == LOW)
-    //         {
-    //             if ((transferDataState == 2) || (transferDataState == 1))
-    //             {
-    //                 transferDataState = 0;
-    //             }
-    //         }
-    //     }
-    // }
-    // leftButtonLastState = leftButtonReading;
+    if ((millis() - lastDebounceTimeLeftBtn) > debounceDelay)
+    {
+        if (leftButtonReading != leftButtonState)
+        {
+            leftButtonState = leftButtonReading;
+            if (leftButtonState == LOW)
+            {
+                if ((transferDataState == 2) || (transferDataState == 1))
+                {
+                    transferDataState = 0;
+                }
+            }
+        }
+    }
+    leftButtonLastState = leftButtonReading;
 
-    // // right button
-    // int rightButtonReading = digitalRead(rightButtonPin);
-    // if (rightButtonReading != rightButtonLastState)
-    // {
-    //     lastDebounceTimeRightBtn = millis();
-    // }
+    // right button
+    int rightButtonReading = digitalRead(rightButtonPin);
+    if (rightButtonReading != rightButtonLastState)
+    {
+        lastDebounceTimeRightBtn = millis();
+    }
 
-    // if ((millis() - lastDebounceTimeRightBtn) > debounceDelay)
-    // {
-    //     if (rightButtonReading != rightButtonState)
-    //     {
-    //         rightButtonState = rightButtonReading;
-    //         if (rightButtonState == LOW)
-    //         {
-    //             if (transferDataState < 2)
-    //             {
-    //                 transferDataState++;
-    //             }
-    //         }
-    //     }
-    // }
-    // rightButtonLastState = rightButtonReading;
+    if ((millis() - lastDebounceTimeRightBtn) > debounceDelay)
+    {
+        if (rightButtonReading != rightButtonState)
+        {
+            rightButtonState = rightButtonReading;
+            if (rightButtonState == LOW)
+            {
+                if (transferDataState < 2)
+                {
+                    transferDataState++;
+                }
+            }
+        }
+    }
+    rightButtonLastState = rightButtonReading;
 
-    testLat += 0.1;
-    testLong += 0.1;
-    testHeading++;
-    testAltitude++;
-    drawLayout(100, -60, testSend, testReceive, testHeading, 13.5, 20, 100);
+    // testLat += 1;
+    // testLong += 1;
+    drawLayout(100, -120, true, true, 270, 13.5, -20, 100);
     if (pageNum == 0)
     {
-        drawAltimeterPage(testAltitude);
+        drawDataTransferPage(transferDataState);
     }
     else if (pageNum == 1)
     {
         drawGpsPage(testLat, testLong);
+    }
+    else if (pageNum == 2)
+    {
+        drawAltimeterPage(1500);
     }
 }

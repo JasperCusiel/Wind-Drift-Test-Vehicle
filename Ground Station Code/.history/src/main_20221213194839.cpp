@@ -803,9 +803,9 @@ void loop()
 
     testLat += 0.1;
     testLong += 0.1;
-    testHeading++;
-    testAltitude++;
-    drawLayout(100, -60, testSend, testReceive, testHeading, 13.5, 20, 100);
+    testHeading = 90;
+    testAltitude += 1;
+    drawLayout(100, -120, testSend, testReceive, testHeading, 13.5, -140, 100);
     if (pageNum == 0)
     {
         drawAltimeterPage(testAltitude);

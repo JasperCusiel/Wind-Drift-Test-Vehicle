@@ -42,6 +42,7 @@ char filename[] = "LOG000.CSV";
 #define RF95_CS 13
 #define RF95_INT 8
 #define RF95_RST 9
+#define RF95_FREQ 915.0
 // Variables
 const int upButtonPin = 2;
 const int downButtonPin = 3;
@@ -52,13 +53,9 @@ float batteryPercentage = 100.0;
 float vehicleHeading = 0.0;
 int count = 0;
 int tick = 0;
-int pageNum = 0;
+int pageNum = 2;
 float testLat = -90.0000;
 float testLong = -180.0000;
-bool testSend = false;
-bool testReceive = true;
-int testHeading = 0;
-int testAltitude = 0;
 
 // data transfer page variables
 int transferDataState;
@@ -380,7 +377,7 @@ void drawLayout(int batteryPercentage, int rssi, bool transmitting, bool receivi
      * @param humidity SHT30 humidity in RH
      */
     drawStatusBar(batteryPercentage, rssi, transmitting, receiving);
-    drawDataPanel(heading, temp, humidity, velocity);
+    drawDataPanel(vehicleHeading, temp, humidity, velocity);
     drawMessages();
     tft.drawLine(0, 20, 108, 20, TFT_WHITE);
 }
@@ -439,63 +436,63 @@ void drawGpsPage(float latitude, float longitude)
     page.pushSprite(0, 21);
 }
 
-// void drawDataTransferPage(int transferState)
-// {
-//     int moveButtonPositionX = 0;
-//     page.fillSprite(TFT_BLACK);
+void drawDataTransferPage(int transferState)
+{
+    int moveButtonPositionX = 0;
+    page.fillSprite(TFT_BLACK);
 
-//     page.drawLine(0, 9, 108, 9, TFT_WHITE); // divider lines
-//     page.drawLine(0, 70, 108, 70, TFT_WHITE);
+    page.drawLine(0, 9, 108, 9, TFT_WHITE); // divider lines
+    page.drawLine(0, 70, 108, 70, TFT_WHITE);
 
-//     page.loadFont(FONT_10PT); // text
-//     page.setTextDatum(MC_DATUM);
-//     page.setTextColor(TFT_WHITE);
-//     page.drawString("USB DATA TRANSFER", 54, 5);
-//     page.setTextColor(TFT_LIGHTGREY);
+    page.loadFont(FONT_10PT); // text
+    page.setTextDatum(MC_DATUM);
+    page.setTextColor(TFT_WHITE);
+    page.drawString("USB DATA TRANSFER", 54, 5);
+    page.setTextColor(TFT_LIGHTGREY);
 
-//     if (transferState == 0)
-//     {
-//         page.drawString("Start Transfer?", 54, 78);
-//         page.pushImage(4, 18, 100, 24, downloadIcon); // file to computer icon
-//         page.pushImage(4, 50, 100, 14, usbGx12Icon);  // gx12 to usb cable icon
-//         page.setTextColor(TFT_GREEN);
-//         page.drawString("YES", 90, 95);
-//     }
-//     else if (transferState == 1)
-//     {
-//         page.pushImage(37, 15, 40, 50, cautionIcon);
-//         page.drawString("Are You Sure?", 54, 78);
-//         page.setTextColor(TFT_RED);
-//         page.drawString("NO", 20, 95);
-//         page.setTextColor(TFT_GREEN);
-//         page.drawString("YES", 90, 95);
-//     }
-//     else if (transferState == 2)
-//     {
-//         page.drawString("Transfer Mode", 54, 78);
-//         page.pushImage(4, 30, 100, 24, fileTransfer);
-//         page.setTextColor(TFT_RED);
-//         page.drawString("CANCEL", 30, 95);
-//         moveButtonPositionX += 20;
-//         if (transferArrowXVal < 20)
-//         {
-//             transferArrowXVal++;
-//         }
-//         else
-//         {
-//             transferArrowXVal = 0;
-//         }
-//         page.pushImage((28 + transferArrowXVal), 36, 13, 10, transferArrow);
-//     }
-//     page.unloadFont();
-//     page.fillSmoothRoundRect((31 + moveButtonPositionX), 88, 46, 13, 6, TFT_LIGHTGREY); // button icons
-//     page.fillRect((50 + moveButtonPositionX), 88, 8, 13, TFT_BLACK);
-//     page.fillSmoothCircle((37 + moveButtonPositionX), 94, 4, TFT_BLACK);
-//     page.fillSmoothCircle((37 + moveButtonPositionX), 94, 2, TFT_LIGHTGREY);
-//     page.fillSmoothRoundRect((68 + moveButtonPositionX), 90, 2, 9, 2, TFT_BLACK);
+    if (transferState == 0)
+    {
+        page.drawString("Start Transfer?", 54, 78);
+        page.pushImage(4, 18, 100, 24, downloadIcon); // file to computer icon
+        page.pushImage(4, 50, 100, 14, usbGx12Icon);  // gx12 to usb cable icon
+        page.setTextColor(TFT_GREEN);
+        page.drawString("YES", 90, 95);
+    }
+    else if (transferState == 1)
+    {
+        page.pushImage(37, 15, 40, 50, cautionIcon);
+        page.drawString("Are You Sure?", 54, 78);
+        page.setTextColor(TFT_RED);
+        page.drawString("NO", 20, 95);
+        page.setTextColor(TFT_GREEN);
+        page.drawString("YES", 90, 95);
+    }
+    else if (transferState == 2)
+    {
+        page.drawString("Transfer Mode", 54, 78);
+        page.pushImage(4, 30, 100, 24, fileTransfer);
+        page.setTextColor(TFT_RED);
+        page.drawString("CANCEL", 30, 95);
+        moveButtonPositionX += 20;
+        if (transferArrowXVal < 20)
+        {
+            transferArrowXVal++;
+        }
+        else
+        {
+            transferArrowXVal = 0;
+        }
+        page.pushImage((28 + transferArrowXVal), 36, 13, 10, transferArrow);
+    }
+    page.unloadFont();
+    page.fillSmoothRoundRect((31 + moveButtonPositionX), 88, 46, 13, 6, TFT_LIGHTGREY); // button icons
+    page.fillRect((50 + moveButtonPositionX), 88, 8, 13, TFT_BLACK);
+    page.fillSmoothCircle((37 + moveButtonPositionX), 94, 4, TFT_BLACK);
+    page.fillSmoothCircle((37 + moveButtonPositionX), 94, 2, TFT_LIGHTGREY);
+    page.fillSmoothRoundRect((68 + moveButtonPositionX), 90, 2, 9, 2, TFT_BLACK);
 
-//     page.pushSprite(0, 21);
-// }
+    page.pushSprite(0, 21);
+}
 //====================================================================================
 //                                    SD card callbacks
 //====================================================================================
@@ -614,7 +611,6 @@ void createDataLoggingFile()
 //====================================================================================
 void setup()
 {
-    rp2040.idleOtherCore();
     pinMode(upButtonPin, INPUT_PULLUP);
     int upButtonReading = digitalRead(upButtonPin);
 
@@ -626,10 +622,10 @@ void setup()
         }
     }
     Serial.begin(9600);
-    // while (!Serial)
-    // {
-    //     delay(10);
-    // }
+    while (!Serial)
+    {
+        delay(10);
+    }
     tft.begin();
     tft.setRotation(1);
     tft.fillScreen(TFT_BLACK);
@@ -655,6 +651,11 @@ void setup()
     Serial.println("Initialization done.");
     createDataLoggingFile();
 
+    // SPI1.setSCK(10);
+    // SPI1.setCS(13);
+    // SPI1.setRX(12);
+    // SPI1.setTX(11);
+    // // SPI1.begin();
     // // LoRa.setSPIFrequency(1E6);
     // LoRa.setSPI(SPI1);
     // LoRa.setPins(13, 9);
@@ -667,26 +668,6 @@ void setup()
 
     // set SPI speed here to force 27Mhz (max clock for ST7735 tft chip)
     SPI.beginTransaction(SPISettings(27000000, MSBFIRST, SPI_MODE0));
-    rp2040.resumeOtherCore();
-}
-void setup1()
-{
-    // SPI1.setSCK(10);
-    // SPI1.setCS(13);
-    // SPI1.setRX(12);
-    // SPI1.setTX(11);
-    // SPI1.begin();
-    // pinMode(13, OUTPUT);
-    // pinMode(13, HIGH);
-    // // LoRa Initialization
-    // LoRa.setPins(13, 27, 8);
-    // LoRa.setSPI(SPI1);
-    // LoRa.setGain(2);
-    // LoRa.dumpRegisters(Serial);
-    // if (!LoRa.begin(915E6))
-    // {
-    //     Serial.println("LoRa init falied !");
-    // }
 }
 
 //====================================================================================
@@ -719,8 +700,7 @@ void loop()
             // only change page if button is still LOW
             if (upButtonState == LOW)
             {
-                // if ((pageNum < 2) && (transferDataState == 0))
-                if (pageNum == 0)
+                if ((pageNum < 2) && (transferDataState == 0))
                 {
                     pageNum++;
                 }
@@ -744,8 +724,7 @@ void loop()
             downButtonState = downButtonReading;
             if (downButtonState == LOW)
             {
-                // if ((pageNum > 0) && (transferDataState == 0))
-                if (pageNum == 1)
+                if ((pageNum > 0) && (transferDataState == 0))
                 {
                     pageNum--;
                 }
@@ -754,64 +733,66 @@ void loop()
     }
     downButtonLastState = downButtonReading;
 
-    // // left button
-    // int leftButtonReading = digitalRead(leftButtonPin);
-    // if (leftButtonReading != leftButtonLastState)
-    // {
-    //     lastDebounceTimeLeftBtn = millis();
-    //     leftButtonPressed = false;
-    // }
+    // left button
+    int leftButtonReading = digitalRead(leftButtonPin);
+    if (leftButtonReading != leftButtonLastState)
+    {
+        lastDebounceTimeLeftBtn = millis();
+        leftButtonPressed = false;
+    }
 
-    // if ((millis() - lastDebounceTimeLeftBtn) > debounceDelay)
-    // {
-    //     if (leftButtonReading != leftButtonState)
-    //     {
-    //         leftButtonState = leftButtonReading;
-    //         if (leftButtonState == LOW)
-    //         {
-    //             if ((transferDataState == 2) || (transferDataState == 1))
-    //             {
-    //                 transferDataState = 0;
-    //             }
-    //         }
-    //     }
-    // }
-    // leftButtonLastState = leftButtonReading;
+    if ((millis() - lastDebounceTimeLeftBtn) > debounceDelay)
+    {
+        if (leftButtonReading != leftButtonState)
+        {
+            leftButtonState = leftButtonReading;
+            if (leftButtonState == LOW)
+            {
+                if ((transferDataState == 2) || (transferDataState == 1))
+                {
+                    transferDataState = 0;
+                }
+            }
+        }
+    }
+    leftButtonLastState = leftButtonReading;
 
-    // // right button
-    // int rightButtonReading = digitalRead(rightButtonPin);
-    // if (rightButtonReading != rightButtonLastState)
-    // {
-    //     lastDebounceTimeRightBtn = millis();
-    // }
+    // right button
+    int rightButtonReading = digitalRead(rightButtonPin);
+    if (rightButtonReading != rightButtonLastState)
+    {
+        lastDebounceTimeRightBtn = millis();
+    }
 
-    // if ((millis() - lastDebounceTimeRightBtn) > debounceDelay)
-    // {
-    //     if (rightButtonReading != rightButtonState)
-    //     {
-    //         rightButtonState = rightButtonReading;
-    //         if (rightButtonState == LOW)
-    //         {
-    //             if (transferDataState < 2)
-    //             {
-    //                 transferDataState++;
-    //             }
-    //         }
-    //     }
-    // }
-    // rightButtonLastState = rightButtonReading;
+    if ((millis() - lastDebounceTimeRightBtn) > debounceDelay)
+    {
+        if (rightButtonReading != rightButtonState)
+        {
+            rightButtonState = rightButtonReading;
+            if (rightButtonState == LOW)
+            {
+                if (transferDataState < 2)
+                {
+                    transferDataState++;
+                }
+            }
+        }
+    }
+    rightButtonLastState = rightButtonReading;
 
-    testLat += 0.1;
-    testLong += 0.1;
-    testHeading++;
-    testAltitude++;
-    drawLayout(100, -60, testSend, testReceive, testHeading, 13.5, 20, 100);
+    // testLat += 1;
+    // testLong += 1;
+    drawLayout(100, -120, true, true, 270, 13.5, -20, 100);
     if (pageNum == 0)
     {
-        drawAltimeterPage(testAltitude);
+        drawDataTransferPage(transferDataState);
     }
     else if (pageNum == 1)
     {
         drawGpsPage(testLat, testLong);
+    }
+    else if (pageNum == 2)
+    {
+        drawAltimeterPage(1500);
     }
 }

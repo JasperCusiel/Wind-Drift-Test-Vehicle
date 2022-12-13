@@ -352,10 +352,6 @@ void setup()
 
 void setup1()
 {
-  while (!Serial)
-  {
-    delay(10); // wait for native usb
-  }
   // SPI Initialization
   SPI.setRX(board_SPI_RX);
   SPI.setTX(board_SPI_TX);
@@ -365,7 +361,6 @@ void setup1()
   // LoRa Initialization
   LoRa.setPins(RFM_CS, RFM_RST, RFM_IQR);
   LoRa.setSPI(SPI);
-  LoRa.dumpRegisters(Serial);
   while (!LoRa.begin(915E6))
   {
     Serial.println("LoRa init falied !");
