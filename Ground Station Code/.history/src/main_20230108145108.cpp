@@ -43,6 +43,8 @@ const int resetPin = 0;
 const int irqPin = 6;
 const int MAX_MESSAGE_LENGTH = 100;
 char message[MAX_MESSAGE_LENGTH];
+// int index = 0;
+bool newMessage = true; // flag to indicate if a new message has been received
 
 // Buttons
 const int upButtonPin = 24;
@@ -174,7 +176,7 @@ void drawStatusBar(float percentage, int rssi, bool transmitting, bool receiving
     // draw RSSI
     const int sigX = 14;
     const int sigY = 4;
-    int strength = map(rssi, -120, -75, 0, 4);
+    int strength = map(rssi, -120, 0, 0, 4);
     unsigned short barZero = TFT_DARKGREY;
     unsigned short barOne = TFT_DARKGREY;
     unsigned short barTwo = TFT_DARKGREY;
@@ -591,6 +593,43 @@ void downButtonClicked()
     // change the mode to 1:
     mode = 0;
 }
+void loraISR(int packetSize)
+{
+    // Read and parse the message
+    // Read the message and store it in the character array
+    for (int i = 0; i < packetSize; i++)
+    {
+        message[i] = (char)LoRa.read();
+    }
+    // Add a null terminator to the end of the message
+    message[packetSize] = '\0';
+    // Log sensor data to SD card
+    SdFile dataFile;
+    if (dataFile.open(newFileName, FILE_WRITE))
+    {
+        dataFile.println(message);
+        dataFile.close();
+    }
+    else
+    {
+        Serial.print("shit");
+    }
+    Serial.println(message);
+    float latitude, longitude, groundSpeed, trackOverGround, temp, humidity, bat;
+    int hour, min, sec, altitute;
+
+    sscanf(message, "%d:%d:%d,%f,%f,%d,%f,%f,%f,%f,%f", &hour, &min, &sec, &latitude, &longitude, &altitute, &groundSpeed, &trackOverGround, &temp, &humidity, &bat);
+    testLat = latitude;
+    testLong = longitude;
+    testAltitude = altitute;
+    testTemp = temp;
+    testHumdity = humidity;
+    vehicleHeading = trackOverGround;
+    batteryPercentage = bat;
+    testGroundSpeed = groundSpeed;
+    Serial.println(String(hour) + ":" + String(min) + ":" + String(sec));
+    newMessage = true; // set the flag to indicate that a new message has been received
+}
 
 //====================================================================================
 //                                    Setup
@@ -608,6 +647,10 @@ void setup()
         {
         }
     }
+    pinMode(9, OUTPUT);
+    digitalWrite(9, HIGH);
+    pinMode(13, OUTPUT);
+    digitalWrite(13, HIGH);
     rp2040.resumeOtherCore();
     // start sd and tft on core 0 as they share the SPI1 bus
     if (!sd.begin(SD_CONFIG))
@@ -616,9 +659,8 @@ void setup()
         Serial.println("* is a card inserted?");
         Serial.println("* is your wiring correct?");
         Serial.println("* did you change the chipSelect pin to match your shield or module?");
-        while (1)
-        {
-        }
+        while (true)
+            delay(10);
     }
     tft.begin();
     tft.setRotation(1);
@@ -648,6 +690,8 @@ void setup1()
             delay(10);
         }
     }
+    LoRa.onReceive(loraISR);
+    LoRa.receive();
 
     // Setup Physical buttons
     // attach the up button:
@@ -661,70 +705,62 @@ void setup1()
 //====================================================================================
 void loop()
 {
-    int packetSize = LoRa.parsePacket();
-    if (packetSize)
-    {
-        // Read and parse the message
-        // Read the message and store it in the character array
-        for (int i = 0; i < packetSize; i++)
-        {
-            message[i] = (char)LoRa.read();
-        }
-        // Add a null terminator to the end of the message
-        message[packetSize] = '\0';
-        // Log sensor data to SD card
-        rssi = LoRa.packetRssi();
-
-        SdFile dataFile;
-        if (dataFile.open(newFileName, FILE_WRITE))
-        {
-            dataFile.println(message);
-            dataFile.close();
-        }
-        else
-        {
-            Serial.print("shit");
-        }
-        Serial.println(message);
-        float latitude, longitude, groundSpeed, trackOverGround, temp, humidity, bat;
-        int hour, min, sec, altitute;
-
-        sscanf(message, "%d:%d:%d,%f,%f,%d,%f,%f,%f,%f,%f", &hour, &min, &sec, &latitude, &longitude, &altitute, &groundSpeed, &trackOverGround, &temp, &humidity, &bat);
-        testLat = latitude;
-        testLong = longitude;
-        testAltitude = altitute;
-        testTemp = temp;
-        testHumdity = humidity;
-        vehicleHeading = trackOverGround;
-        batteryPercentage = bat;
-        testGroundSpeed = groundSpeed;
-        testReceive = true;
-    }
     // update the state of the up button:
     upButton.tick();
     // update the state of the down button:
     downButton.tick();
-    tft.startWrite();
-    drawLayout(batteryPercentage, rssi, testSend, testReceive, vehicleHeading, testGroundSpeed, testTemp, testHumdity);
-    // use a switch statement to check the value of the mode variable:
-    switch (mode)
+    if (newMessage)
     {
-    // if the mode value is 1, do something:
-    case 0:
-        drawAltimeterPage(testAltitude);
-        break;
+        tft.startWrite();
+        drawLayout(batteryPercentage, -60, testSend, testReceive, vehicleHeading, testGroundSpeed, testTemp, testHumdity);
+        // use a switch statement to check the value of the mode variable:
+        switch (mode)
+        {
+        // if the mode value is 1, do something:
+        case 0:
+            drawAltimeterPage(testAltitude);
+            break;
 
-    // if the mode value is 2, do something else:
-    case 1:
-        drawGpsPage(testLat, testLong);
-        break;
+        // if the mode value is 2, do something else:
+        case 1:
+            drawGpsPage(testLat, testLong);
+            break;
 
-    // if the mode value is not covered by the case statements, do something else:
-    default:
-        // insert your code here to handle other mode values
-        break;
+        // if the mode value is not covered by the case statements, do something else:
+        default:
+            // insert your code here to handle other mode values
+            break;
+        }
+        tft.endWrite();
+        lastAltitude = testAltitude;
+        lastLat = testLat;
+        lastLong = testLong;
+        newMessage = false;
     }
-    tft.endWrite();
-    testReceive = false;
-    Serial.println(rssi);
+    else
+    {
+        tft.startWrite();
+        // use a switch statement to check the value of the mode variable:
+        switch (mode)
+        {
+        // if the mode value is 1, do something:
+        case 0:
+            drawAltimeterPage(lastAltitude);
+            break;
+
+        // if the mode value is 2, do something else:
+        case 1:
+            drawGpsPage(lastLat, lastLong);
+            break;
+
+        // if the mode value is not covered by the case statements, do something else:
+        default:
+            // insert your code here to handle other mode values
+            break;
+        }
+        tft.endWrite();
+    }
+}
+void loop1()
+{
 }

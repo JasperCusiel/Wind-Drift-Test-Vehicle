@@ -5,10 +5,22 @@
 #include <SPI.h>
 #include <arduino-sht.h>
 #include <Adafruit_TinyUSB.h>
-#include <LoRa.h>
 #include <OneButton.h>
 #include <SdFat.h>
 #include <SdFatConfig.h>
+// RP2040 Board
+const int board_SPI_SCK = 2;
+const int board_SPI_TX = 3;
+const int board_SPI_RX = 4;
+
+const int board_SPI1_SCK = 14;
+const int board_SPI1_TX = 15;
+const int board_SPI1_RX = 12;
+
+const int board_SDA = 6;
+const int board_SCL = 7;
+
+const int bootSelectButtonPin = 22;
 int vehicleState = 0; // 0 = charging mode, 1 = dataLogging, 2 = Error
 bool loggingData = false;
 volatile bool bufferAvalible = false;
@@ -19,12 +31,6 @@ const int LED_RED = 28;
 const int LED_BLUE = 27;
 int ledState = LOW;
 unsigned long previousMillis = 0;
-
-// Buttons
-const int powerButtonPin = 21;
-const int bootSelectButtonPin = 22;
-OneButton powerButton(powerButtonPin);
-OneButton bootSelectButton(bootSelectButtonPin);
 
 // MS5637 Altimeter
 MS5637 altimeter;
@@ -56,11 +62,19 @@ SFE_UBLOX_GNSS GNSS;
 long lastTime = 0; // Simple local timer. Limits amount if I2C traffic to u-blox module.
 const int ppsPin = 17;
 
+// SD card setup
+#define SDCARD_SPI SPI1
+#define PIN_SD_MOSI 15
+#define PIN_SD_MISO 12
+#define PIN_SD_SCK 14
+#define PIN_SD_SS 9
+// SD card setup
+const int chipSelect = 9;
 // USB Mass Storage object
 Adafruit_USBD_MSC usb_msc;
 // File system on SD Card
 #define SPI_CLOCK SD_SCK_MHZ(20)
-#define SD_CONFIG SdSpiConfig(PIN_SPI1_SS, SHARED_SPI, SPI_CLOCK, &SPI1)
+#define SD_CONFIG SdSpiConfig(chipSelect, SHARED_SPI, SPI_CLOCK, &SPI1)
 SdFat sd;
 // string to buffer output
 String dataBuffer;
@@ -80,15 +94,8 @@ int mode = 1;
 // return number of copied bytes (must be multiple of block size)
 int32_t msc_read_cb(uint32_t lba, void *buffer, uint32_t bufsize)
 {
-  bool rc;
-
-#if SD_FAT_VERSION >= 20000
-  rc = sd.card()->readSectors(lba, (uint8_t *)buffer, bufsize / 512);
-#else
-  rc = sd.card()->readBlocks(lba, (uint8_t *)buffer, bufsize / 512);
-#endif
-
-  return rc ? bufsize : -1;
+  (void)bufsize;
+  return card.readBlock(lba, (uint8_t *)buffer) ? 512 : -1;
 }
 
 // Callback invoked when received WRITE10 command.
@@ -96,31 +103,16 @@ int32_t msc_read_cb(uint32_t lba, void *buffer, uint32_t bufsize)
 // return number of written bytes (must be multiple of block size)
 int32_t msc_write_cb(uint32_t lba, uint8_t *buffer, uint32_t bufsize)
 {
-  bool rc;
-
-#if SD_FAT_VERSION >= 20000
-  rc = sd.card()->writeSectors(lba, buffer, bufsize / 512);
-#else
-  rc = sd.card()->writeBlocks(lba, buffer, bufsize / 512);
-#endif
-
-  return rc ? bufsize : -1;
+  (void)bufsize;
+  return card.writeBlock(lba, buffer) ? 512 : -1;
 }
 
 // Callback invoked when WRITE10 command is completed (status received and accepted by host).
 // used to flush any pending cache.
 void msc_flush_cb(void)
 {
-#if SD_FAT_VERSION >= 20000
-  sd.card()->syncDevice();
-#else
-  sd.card()->syncBlocks();
-#endif
-
-  // clear file system's cache to force refresh
-  sd.cacheClear();
+  // nothing to do
 }
-
 void start_usb_mass_storage()
 {
   // Set disk vendor id, product id and revision with string up to 8, 16, 4 characters respectively
@@ -133,33 +125,21 @@ void start_usb_mass_storage()
   // If we don't initialize, board will be enumerated as CDC only
   usb_msc.setUnitReady(false);
   usb_msc.begin();
-
   Serial.begin(9600);
-  Serial.println("Adafruit TinyUSB Mass Storage SD Card example");
 
-  Serial.print("\nInitializing SD card ... ");
-  Serial.print("CS = ");
-  Serial.println(PIN_SPI1_SS);
-
-  if (!sd.begin(SD_CONFIG))
+  if (!card.init(SPI_FULL_SPEED, PIN_SD_SS))
   {
-    Serial.println("initialization failed. Things to check:");
-    Serial.println("* is a card inserted?");
-    Serial.println("* is your wiring correct?");
-    Serial.println("* did you change the chipSelect pin to match your shield or module?");
-    while (1)
-    {
-      digitalWrite(LED_GREEN, LOW);
-      digitalWrite(LED_RED, LOW);
-    }
   }
 
-  // Size in blocks (512 bytes)
-#if SD_FAT_VERSION >= 20000
-  uint32_t block_count = sd.card()->sectorCount();
-#else
-  uint32_t block_count = sd.card()->cardSize();
-#endif
+  // Now we will try to open the 'volume'/'partition' - it should be FAT16 or FAT32
+  if (!volume.init(card))
+  {
+    Serial.println("Could not find FAT16/FAT32 partition.\nMake sure you've formatted the card");
+    while (1)
+      delay(1);
+  }
+
+  uint32_t block_count = volume.blocksPerCluster() * volume.clusterCount();
 
   Serial.print("Volume size (MB):  ");
   Serial.println((block_count / 2) / 1024);
@@ -177,48 +157,45 @@ void start_usb_mass_storage()
 
 void createDataLoggingFile()
 {
-  // Create a new file with a number one higher than the highest numbered file
-  int highestFileNumber = 0; // Initialize the highest file number to 0
-  SdFile root;
-  root.openRoot(sd.vol());
-  SdFile file;
-  while (file.openNext(&root, O_READ))
+  EEPROM.begin(256);
+  // for (int i = 0; i < 512; i++)
+  // {
+  //   EEPROM.write(i, 0);
+  // }
+  int fileNum = 6;
+  Serial.println(fileNum);
+  filename[3] = fileNum / 100 + '0';
+  filename[4] = (fileNum % 100) / 10 + '0';
+  filename[5] = fileNum % 10 + '0';
+  if (!SD.exists("test1.csv"))
   {
-    // Get the file's name
-    char fileName[13];
-    file.getName(fileName, 13);
-    // Extract the file number from the file's name
-    int fileNumber = atoi(fileName);
-    // Update the highest file number if necessary
-    if (fileNumber > highestFileNumber)
-    {
-      highestFileNumber = fileNumber;
-    }
-    file.close();
+    Serial.println("test");
+    // only open a new file if it doesn't exist
+    // generate a new file name
+    filename[3] = fileNum / 100 + '0';
+    filename[4] = (fileNum % 100) / 10 + '0';
+    filename[5] = fileNum % 10 + '0';
+    // create the new file
+    File logFile = SD.open("test1.csv", FILE_WRITE);
+    logFile.print("Time UTC (H:M:S),Time Valid (0 = Invalid 1 = Valid),Longitude (DD°),Latitude (DD°),GPS Altitude (m),GPS Ground Speed (m/s),GPS Track Over Ground (deg°),Satellites In View, Fix Type (0 = No Fix 3 = 3D 4 = GNSS 5 = Time Fix), Primary Temperature (C°), Humidity (RH%), Altimeter Temperature (C°), Altitude Change (m), Battery Percentage, Battery Discharge Rate (%/h), timestamp");
+    logFile.println();
+    logFile.close();
+    fileNum++;                 // increment the file number
+    EEPROM.update(0, fileNum); // store the new file number in eeprom
+    fileCreated = true;
   }
-  sprintf(newFileName, "%d.csv", highestFileNumber + 1);
-  if (!sd.exists(newFileName))
+  else
   {
-    SdFile newFile;
-    if (newFile.open(newFileName, O_CREAT | O_WRITE))
-    {
-      Serial.print("Created new file: ");
-      Serial.println(newFileName);
-      newFile.print("Time UTC (H:M:S),Time Valid (0 = Invalid 1 = Valid),Longitude (DD°),Latitude (DD°),GPS Altitude (m),GPS Ground Speed (m/s),GPS Track Over Ground (deg°),Satellites In View, Fix Type (0 = No Fix 3 = 3D 4 = GNSS 5 = Time Fix), Primary Temperature (C°), Humidity (RH%), Altimeter Temperature (C°), Altitude Change (m), Battery Percentage, Battery Discharge Rate (%/h), timestamp");
-      newFile.println();
-      newFile.close();
-    }
-    else
-    {
-      Serial.println("Error creating new file!");
-    }
+    vehicleState = 2;
+    fileCreated = false;
   }
+  EEPROM.end();
 }
 
-void logGPSData()
+bool logGPSData()
 {
-  SdFile dataFile;
-  if (dataFile.open(newFileName, FILE_WRITE))
+  File logFile = SD.open("test1.csv", FILE_WRITE);
+  if (logFile)
   {
     bufferAvalible = false;
     dataBuffer = "";
@@ -256,21 +233,16 @@ void logGPSData()
     dataBuffer += lipo.getSOC();
     dataBuffer += ",";
     dataBuffer += lipo.getChangeRate();
-    dataFile.println(dataBuffer.c_str());
-    dataFile.close();
+    dataBuffer += ",";
+    dataBuffer += millis();
+    dataBuffer += ",";
+    logFile.write(dataBuffer.c_str());
+    logFile.println();
+    logFile.close();
     bufferAvalible = true;
+    return true;
   }
-}
-void iluminateErrorLed()
-{
-  Serial.println("error");
-  digitalWrite(LED_RED, HIGH);
-  digitalWrite(LED_GREEN, LOW);
-  digitalWrite(LED_BLUE, LOW);
-}
-void buttonDoubleClick()
-{
-  Serial.println("double clicked");
+  return false;
 }
 
 //====================================================================================
@@ -287,30 +259,30 @@ void setup()
   int bootButtonReading = digitalRead(bootSelectButtonPin);
   if (bootButtonReading == LOW)
   {
+    start_usb_mass_storage();
     digitalWrite(LED_GREEN, HIGH);
     digitalWrite(LED_RED, HIGH);
-    start_usb_mass_storage();
     while (1)
     {
     }
   }
-  rp2040.resumeOtherCore();
+  // pinMode(powerBtnSense, INPUT_PULLUP);
   digitalWrite(LED_BLUE, HIGH);
   Serial.begin(9600);
-  while (!Serial)
-  {
-  }
+  // I2C Initialization
+  Wire1.setSDA(board_SDA);
+  Wire1.setSCL(board_SCL);
   Wire1.begin();
-  // Wire1.setClock(400000); // Increase I2C clock speed to 400kHz
+  Wire1.setClock(400000); // Increase I2C clock speed to 400kHz
+  SPI1.setRX(board_SPI1_RX);
+  SPI1.setTX(board_SPI1_TX);
+  SPI1.setSCK(board_SPI1_SCK);
+  SPI1.begin();
 
   // Altimeter Initialization
-  if (!altimeter.begin(Wire1))
+  if (altimeter.begin(Wire1) == false)
   {
     Serial.println("MS5637 sensor did not respond. Please check wiring.");
-    iluminateErrorLed();
-    while (1)
-    {
-    }
   }
   // Set the resolution of the sensor to the highest level of resolution: 0.016 mbar
   altimeter.setResolution(ms5637_resolution_osr_8192);
@@ -321,65 +293,59 @@ void setup()
     startingPressure += altimeter.getPressure();
   startingPressure /= (float)16;
   // MAX17048 Battery Fuel Gauge start
-  if (!lipo.begin(Wire1)) // Connect to the MAX17043 using non-standard wire port
+  while (lipo.begin(Wire1) == false) // Connect to the MAX17043 using non-standard wire port
   {
     Serial.println(F("MAX17048 not detected."));
-    iluminateErrorLed();
-    while (1)
-    {
-    }
   }
   lipo.setThreshold(20);
 
   // SHT30 Temperature and Humidity Sensor Initalization
-  if (!SHT30.init(Wire1))
+  while (!SHT30.init(Wire1))
   {
     Serial.print("SHT30 error");
-    iluminateErrorLed();
-    while (1)
-    {
-    }
   }
 
   // GPS setup
-  if (!GNSS.begin(Wire1)) // Connect to the u-blox module using Wire port
+  if (GNSS.begin(Wire1) == false) // Connect to the u-blox module using Wire port
   {
     Serial.println(F("u-blox GNSS not detected at default I2C address. Please check wiring. Freezing."));
-    iluminateErrorLed();
     while (1)
-    {
-    }
+      ;
   }
   GNSS.setI2COutput(COM_TYPE_UBX);                 // Set the I2C port to output UBX only (turn off NMEA noise)
   GNSS.setNavigationFrequency(5);                  // Set output to 10 times a second
   GNSS.saveConfigSelective(VAL_CFG_SUBSEC_IOPORT); // Save (only) the communications port settings to flash and BBR
-  Serial.println("intialization done");
+
+  // Start SD card
+  if (!SD.begin(PIN_SD_SS))
+  {
+    Serial.println("Initialization failed!");
+    return;
+  }
+  Serial.println("Initialization done.");
+  digitalWrite(LED_BLUE, LOW);
+  dataBuffer.reserve(1024);
+  rp2040.resumeOtherCore();
 }
 
 void setup1()
 {
-  LoRa.setPins(csPin, resetPin, irqPin);
-  if (!LoRa.begin(915E6))
+  // SPI Initialization
+  SPI.setRX(board_SPI_RX);
+  SPI.setTX(board_SPI_TX);
+  SPI.setSCK(board_SPI_SCK);
+  SPI.begin();
+
+  // LoRa Initialization
+  LoRa.setPins(RFM_CS, RFM_RST, RFM_IQR);
+  LoRa.setSPI(SPI);
+  while (!LoRa.begin(915E6))
   {
-    Serial.println("LoRa init failed. Check your connections.");
-    iluminateErrorLed();
-    while (1)
-    {
-    }
+    Serial.println("LoRa init falied !");
+    return;
   }
-  if (!sd.begin(SD_CONFIG))
-  {
-    Serial.println("initialization failed. Things to check:");
-    Serial.println("* is a card inserted?");
-    Serial.println("* is your wiring correct?");
-    Serial.println("* did you change the chipSelect pin to match your shield or module?");
-    iluminateErrorLed();
-    while (1)
-    {
-    }
-  }
+  Serial.println("LoRa init");
   createDataLoggingFile();
-  bootSelectButton.attachDoubleClick(buttonDoubleClick);
 }
 
 void loop1()
@@ -395,7 +361,6 @@ void loop1()
       digitalWrite(LED_BLUE, LOW);
     }
   }
-  bootSelectButton.tick();
   // Serial.print("Sending packet: ");
   // Serial.println(count);
 
@@ -412,25 +377,116 @@ void loop1()
 
 void loop()
 {
-  // if (!fileCreated)
-  // {
-  //   createDataLoggingFile();
-  // }
-  // if (millis() - lastTime > 1000)
-  // {
-  //   int time = millis();
-  //   if (logGPSData())
-  //   {
-  //     digitalWrite(LED_GREEN, HIGH);
-  //     digitalWrite(LED_RED, LOW);
-  //     digitalWrite(LED_BLUE, LOW);
-  //   }
-  //   else
-  //   {
-  //     digitalWrite(LED_RED, HIGH);
-  //     digitalWrite(LED_GREEN, LOW);
-  //     digitalWrite(LED_BLUE, LOW);
-  //   }
-  //   lastTime = millis(); // Update the timer
-  // }
+  if (!fileCreated)
+  {
+    createDataLoggingFile();
+  }
+  if (millis() - lastTime > 1000)
+  {
+    int time = millis();
+    if (logGPSData())
+    {
+      digitalWrite(LED_GREEN, HIGH);
+      digitalWrite(LED_RED, LOW);
+      digitalWrite(LED_BLUE, LOW);
+    }
+    else
+    {
+      digitalWrite(LED_RED, HIGH);
+      digitalWrite(LED_GREEN, LOW);
+      digitalWrite(LED_BLUE, LOW);
+    }
+    lastTime = millis(); // Update the timer
+  }
 }
+
+// if (loggingData)
+// {
+//   if (!fileCreated)
+//   {
+//     createDataLoggingFile();
+//   }
+//   else if (logGPSData())
+//   {
+//     digitalWrite(LED_RED, LOW);
+//     digitalWrite(LED_GREEN, HIGH);
+//     digitalWrite(LED_BLUE, LOW);
+//   }
+//   else
+//   {
+//     digitalWrite(LED_RED, HIGH);
+//     digitalWrite(LED_GREEN, LOW);
+//     digitalWrite(LED_BLUE, LOW);
+//   }
+// }
+// else
+// {
+//   int powerButtonState = digitalRead(powerBtnSense);
+//   int bootButtonState = digitalRead(bootSelectButtonPin);
+//   if (powerButtonState == LOW && powerBtnSense == LOW)
+//   {
+//     loggingData = true;
+//   }
+// }
+// if (vehicleState == 1)
+// {
+//   if (!fileCreated)
+//   {
+//     digitalWrite(LED_BLUE, LOW);
+//     createDataLoggingFile();
+//   }
+
+//   if (millis() - lastTime > 1000)
+//   {
+//     int time = millis();
+//     if (!logGPSData())
+//     {
+//       vehicleState = 2;
+//       // not logging data
+//     }
+//     else
+//     {
+//       digitalWrite(LED_GREEN, HIGH);
+//     }
+//     lastTime = millis(); // Update the timer
+//     Serial.println(lastTime - time);
+//   }
+// }
+// if (vehicleState == 0)
+// {
+//   // Charging check for both button press
+//   if ((digitalRead(powerBtnSense) == LOW) && (digitalRead(bootSelectButtonPin) == LOW))
+//   {
+//     vehicleState = 1;
+//     digitalWrite(LED_BLUE, LOW);
+//     digitalWrite(LED_GREEN, LOW);
+//     digitalWrite(LED_RED, LOW);
+//   }
+//   if (lipo.getSOC() < 100)
+//   {
+//     unsigned long currentMillis = millis();
+//     if (currentMillis - previousMillis >= 2000)
+//     {
+//       // save the last time you blinked the LED
+//       previousMillis = currentMillis;
+//       // if the LED is off turn it on and vice-versa:
+//       if (ledState == LOW)
+//       {
+//         ledState = HIGH;
+//       }
+//       else
+//       {
+//         ledState = LOW;
+//       }
+//       digitalWrite(LED_BLUE, ledState);
+//       digitalWrite(LED_GREEN, LOW);
+//       digitalWrite(LED_RED, ledState);
+//     }
+//   }
+//   // else
+//   // {
+//   //   digitalWrite(LED_BLUE, HIGH);
+//   //   digitalWrite(LED_GREEN, LOW);
+//   //   digitalWrite(LED_RED, LOW);
+//   // }
+// }

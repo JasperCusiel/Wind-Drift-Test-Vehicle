@@ -21,10 +21,8 @@ int ledState = LOW;
 unsigned long previousMillis = 0;
 
 // Buttons
-const int powerButtonPin = 21;
 const int bootSelectButtonPin = 22;
-OneButton powerButton(powerButtonPin);
-OneButton bootSelectButton(bootSelectButtonPin);
+const int powerButtonPin = 21;
 
 // MS5637 Altimeter
 MS5637 altimeter;
@@ -268,10 +266,6 @@ void iluminateErrorLed()
   digitalWrite(LED_GREEN, LOW);
   digitalWrite(LED_BLUE, LOW);
 }
-void buttonDoubleClick()
-{
-  Serial.println("double clicked");
-}
 
 //====================================================================================
 //                                    Setup
@@ -379,7 +373,6 @@ void setup1()
     }
   }
   createDataLoggingFile();
-  bootSelectButton.attachDoubleClick(buttonDoubleClick);
 }
 
 void loop1()
@@ -395,7 +388,6 @@ void loop1()
       digitalWrite(LED_BLUE, LOW);
     }
   }
-  bootSelectButton.tick();
   // Serial.print("Sending packet: ");
   // Serial.println(count);
 

@@ -616,9 +616,8 @@ void setup()
         Serial.println("* is a card inserted?");
         Serial.println("* is your wiring correct?");
         Serial.println("* did you change the chipSelect pin to match your shield or module?");
-        while (1)
-        {
-        }
+        while (true)
+            delay(10);
     }
     tft.begin();
     tft.setRotation(1);

@@ -9,6 +9,19 @@
 #include <OneButton.h>
 #include <SdFat.h>
 #include <SdFatConfig.h>
+// RP2040 Board
+const int board_SPI_SCK = 2;
+const int board_SPI_TX = 3;
+const int board_SPI_RX = 4;
+
+const int board_SPI1_SCK = 14;
+const int board_SPI1_TX = 15;
+const int board_SPI1_RX = 12;
+
+const int board_SDA = 6;
+const int board_SCL = 7;
+
+const int bootSelectButtonPin = 22;
 int vehicleState = 0; // 0 = charging mode, 1 = dataLogging, 2 = Error
 bool loggingData = false;
 volatile bool bufferAvalible = false;
@@ -19,12 +32,6 @@ const int LED_RED = 28;
 const int LED_BLUE = 27;
 int ledState = LOW;
 unsigned long previousMillis = 0;
-
-// Buttons
-const int powerButtonPin = 21;
-const int bootSelectButtonPin = 22;
-OneButton powerButton(powerButtonPin);
-OneButton bootSelectButton(bootSelectButtonPin);
 
 // MS5637 Altimeter
 MS5637 altimeter;
@@ -135,6 +142,8 @@ void start_usb_mass_storage()
   usb_msc.begin();
 
   Serial.begin(9600);
+  digitalWrite(LED_GREEN, HIGH);
+  digitalWrite(LED_RED, HIGH);
   Serial.println("Adafruit TinyUSB Mass Storage SD Card example");
 
   Serial.print("\nInitializing SD card ... ");
@@ -268,10 +277,6 @@ void iluminateErrorLed()
   digitalWrite(LED_GREEN, LOW);
   digitalWrite(LED_BLUE, LOW);
 }
-void buttonDoubleClick()
-{
-  Serial.println("double clicked");
-}
 
 //====================================================================================
 //                                    Setup
@@ -287,8 +292,6 @@ void setup()
   int bootButtonReading = digitalRead(bootSelectButtonPin);
   if (bootButtonReading == LOW)
   {
-    digitalWrite(LED_GREEN, HIGH);
-    digitalWrite(LED_RED, HIGH);
     start_usb_mass_storage();
     while (1)
     {
@@ -297,20 +300,13 @@ void setup()
   rp2040.resumeOtherCore();
   digitalWrite(LED_BLUE, HIGH);
   Serial.begin(9600);
-  while (!Serial)
-  {
-  }
   Wire1.begin();
   // Wire1.setClock(400000); // Increase I2C clock speed to 400kHz
 
   // Altimeter Initialization
-  if (!altimeter.begin(Wire1))
+  if (altimeter.begin(Wire1) == false)
   {
     Serial.println("MS5637 sensor did not respond. Please check wiring.");
-    iluminateErrorLed();
-    while (1)
-    {
-    }
   }
   // Set the resolution of the sensor to the highest level of resolution: 0.016 mbar
   altimeter.setResolution(ms5637_resolution_osr_8192);
@@ -321,39 +317,32 @@ void setup()
     startingPressure += altimeter.getPressure();
   startingPressure /= (float)16;
   // MAX17048 Battery Fuel Gauge start
-  if (!lipo.begin(Wire1)) // Connect to the MAX17043 using non-standard wire port
+  while (lipo.begin(Wire1) == false) // Connect to the MAX17043 using non-standard wire port
   {
     Serial.println(F("MAX17048 not detected."));
     iluminateErrorLed();
-    while (1)
-    {
-    }
   }
   lipo.setThreshold(20);
 
   // SHT30 Temperature and Humidity Sensor Initalization
-  if (!SHT30.init(Wire1))
+  while (!SHT30.init(Wire1))
   {
     Serial.print("SHT30 error");
     iluminateErrorLed();
-    while (1)
-    {
-    }
   }
 
   // GPS setup
-  if (!GNSS.begin(Wire1)) // Connect to the u-blox module using Wire port
+  if (GNSS.begin(Wire1) == false) // Connect to the u-blox module using Wire port
   {
     Serial.println(F("u-blox GNSS not detected at default I2C address. Please check wiring. Freezing."));
-    iluminateErrorLed();
     while (1)
     {
+      iluminateErrorLed();
     }
   }
   GNSS.setI2COutput(COM_TYPE_UBX);                 // Set the I2C port to output UBX only (turn off NMEA noise)
   GNSS.setNavigationFrequency(5);                  // Set output to 10 times a second
   GNSS.saveConfigSelective(VAL_CFG_SUBSEC_IOPORT); // Save (only) the communications port settings to flash and BBR
-  Serial.println("intialization done");
 }
 
 void setup1()
@@ -379,7 +368,6 @@ void setup1()
     }
   }
   createDataLoggingFile();
-  bootSelectButton.attachDoubleClick(buttonDoubleClick);
 }
 
 void loop1()
@@ -395,7 +383,6 @@ void loop1()
       digitalWrite(LED_BLUE, LOW);
     }
   }
-  bootSelectButton.tick();
   // Serial.print("Sending packet: ");
   // Serial.println(count);
 

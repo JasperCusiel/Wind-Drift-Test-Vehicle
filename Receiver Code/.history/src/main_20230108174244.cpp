@@ -395,7 +395,6 @@ void loop1()
       digitalWrite(LED_BLUE, LOW);
     }
   }
-  bootSelectButton.tick();
   // Serial.print("Sending packet: ");
   // Serial.println(count);
 

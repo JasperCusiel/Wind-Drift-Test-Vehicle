@@ -268,9 +268,8 @@ void iluminateErrorLed()
   digitalWrite(LED_GREEN, LOW);
   digitalWrite(LED_BLUE, LOW);
 }
-void buttonDoubleClick()
+void longButtonPress()
 {
-  Serial.println("double clicked");
 }
 
 //====================================================================================
@@ -379,7 +378,7 @@ void setup1()
     }
   }
   createDataLoggingFile();
-  bootSelectButton.attachDoubleClick(buttonDoubleClick);
+  bootSelectButton.isLongPressed(longButtonPress);
 }
 
 void loop1()
@@ -395,7 +394,6 @@ void loop1()
       digitalWrite(LED_BLUE, LOW);
     }
   }
-  bootSelectButton.tick();
   // Serial.print("Sending packet: ");
   // Serial.println(count);
 

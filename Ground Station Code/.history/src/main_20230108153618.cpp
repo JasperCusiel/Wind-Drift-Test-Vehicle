@@ -6,6 +6,7 @@
 #include <OneButton.h>
 #include <SdFat.h>
 #include <SdFatConfig.h>
+#include <CoreMutex.h>
 
 // Include Bitmap Images
 #include "Hundredths Needle.h"
@@ -43,6 +44,8 @@ const int resetPin = 0;
 const int irqPin = 6;
 const int MAX_MESSAGE_LENGTH = 100;
 char message[MAX_MESSAGE_LENGTH];
+// int index = 0;
+bool newMessage = true; // flag to indicate if a new message has been received
 
 // Buttons
 const int upButtonPin = 24;
@@ -616,9 +619,8 @@ void setup()
         Serial.println("* is a card inserted?");
         Serial.println("* is your wiring correct?");
         Serial.println("* did you change the chipSelect pin to match your shield or module?");
-        while (1)
-        {
-        }
+        while (true)
+            delay(10);
     }
     tft.begin();
     tft.setRotation(1);
