@@ -47,9 +47,12 @@ int debounceDelay = 20;
 
 // MAX17048 Battery Fuel Gauge
 SFE_MAX1704X lipo(MAX1704X_MAX17048);
+double voltage = 0;
+double soc = 0;
+bool alert;
+
 // SHT30 Temperature and Humidity Sensor
 SHTSensor SHT30;
-float temp, humidity;
 
 // LoRa Setup
 const int csPin = 19;
@@ -190,6 +193,11 @@ void start_usb_mass_storage()
   usb_msc.setUnitReady(true);
 }
 
+void sendDataOverLora(char *data)
+{
+  LoRa.beginPacket();
+}
+
 //====================================================================================
 //                                  Data Logging
 //====================================================================================
@@ -266,7 +274,6 @@ void logGPSData()
     float gpsHeading = (GNSS.getHeading() * 1E-5);
     int satelitesInView = GNSS.getSIV();
     int fixType = GNSS.getFixType();
-    SHT30.readSample();
     float externalTemp = SHT30.getTemperature();
     float externalHumidity = SHT30.getHumidity();
     float altimeterTemp = altimeter.getTemperature();
@@ -283,14 +290,7 @@ void logGPSData()
     logCount++;
     if (logCount == 5)
     {
-      sprintf(loraBuffer, "%d:%d:%d,%.4f,%.4f,%.0f,%.1f,%.1f,%.1f,%.1f,%.1f", hour, min, sec, gpsLatitude, gpsLongitude, altimeterAltitude, gpsGroundSpeed, gpsHeading, externalTemp, externalHumidity, lipoStateOfCharge);
-      LoRa.beginPacket();
-      LoRa.write((const uint8_t *)loraBuffer, strlen(loraBuffer));
-      LoRa.endPacket(true); // true = async / non-blocking mode
-      Serial.println("sent lora");
-      Serial.println(strlen(loraBuffer));
-      Serial.println(loraBuffer);
-      logCount = 0;
+      sprintf(loraBuffer, "%d:%d:%d,%.4f,%.4f,%d,%.1f,%.1f,%.1f,%.1f,%.1f", hour, min, sec, gpsLatitude, gpsLongitude, altimeterAltitude, gpsGroundSpeed, gpsHeading, externalTemp, externalHumidity, batterySOC);
     }
   }
   else
@@ -437,15 +437,15 @@ void setup()
       Serial.print("SHT30 error");
     }
   }
-  SHT30.setAccuracy(SHTSensor::SHT_ACCURACY_MEDIUM); // only supported by SHT3x
 
   // GPS setup
   while (!GNSS.begin(Wire1)) // Connect to the u-blox module using Wire port
   {
     Serial.println(F("u-blox GNSS not detected at default I2C address. Please check wiring. Freezing."));
   }
+  digitalWrite(LED_RED, LOW);
   GNSS.setI2COutput(COM_TYPE_UBX);                 // Set the I2C port to output UBX only (turn off NMEA noise)
-  GNSS.setNavigationFrequency(1);                  // Set output to 1 times a second
+  GNSS.setNavigationFrequency(5);                  // Set output to 10 times a second
   GNSS.saveConfigSelective(VAL_CFG_SUBSEC_IOPORT); // Save (only) the communications port settings to flash and BBR
   Serial.println("intialization done");
   digitalWrite(LED_BLUE, LOW);

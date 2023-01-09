@@ -47,6 +47,10 @@ int debounceDelay = 20;
 
 // MAX17048 Battery Fuel Gauge
 SFE_MAX1704X lipo(MAX1704X_MAX17048);
+double voltage = 0;
+double soc = 0;
+bool alert;
+
 // SHT30 Temperature and Humidity Sensor
 SHTSensor SHT30;
 float temp, humidity;
@@ -283,7 +287,7 @@ void logGPSData()
     logCount++;
     if (logCount == 5)
     {
-      sprintf(loraBuffer, "%d:%d:%d,%.4f,%.4f,%.0f,%.1f,%.1f,%.1f,%.1f,%.1f", hour, min, sec, gpsLatitude, gpsLongitude, altimeterAltitude, gpsGroundSpeed, gpsHeading, externalTemp, externalHumidity, lipoStateOfCharge);
+      sprintf(loraBuffer, "%d:%d:%d,%.4f,%.4f,%.0f,%.1f,%.1f,%.1f,%.1f,%.1f", hour, min, sec, gpsLatitude, gpsLongitude, altimeterAltitude, gpsGroundSpeed, gpsHeading, externalTemp, externalHumidity, batterySOC);
       LoRa.beginPacket();
       LoRa.write((const uint8_t *)loraBuffer, strlen(loraBuffer));
       LoRa.endPacket(true); // true = async / non-blocking mode
@@ -509,41 +513,58 @@ void loop1()
 
 void loop()
 {
-  switch (mode)
+  // switch (mode)
+  // {
+  // // charge mode
+  // case 0:
+  //   if (!powerButtonPressed)
+  //   {
+  //     batterySOC = lipo.getSOC();
+  //     if (batterySOC < 100)
+  //     {
+  //       blinkLED();
+  //     }
+  //     else
+  //     {
+  //       digitalWrite(LED_BLUE, HIGH);
+  //     }
+  //   }
+  //   break;
+
+  // // data log mode
+  // case 1:
+  //   // Get the current time
+  //   currentLogMillis = millis();
+
+  //   // Check if it's time to run the function
+  //   if (currentLogMillis - previousLogMillis > DATA_LOG_INTERVAL)
+  //   {
+  //     // Run the function
+  //     logGPSData();
+  //     // Update the previous time to be the current time
+  //     previousLogMillis = currentLogMillis;
+  //   }
+  //   break;
+  //   // if the mode value is not covered by the case statements, do something else:
+  // default:
+  //   // insert your code here to handle other mode values
+  //   break;
+  // }
+  // put your main code here, to run repeatedly:
+  if (SHT30.readSample())
   {
-  // charge mode
-  case 0:
-    if (!powerButtonPressed)
-    {
-      batterySOC = lipo.getSOC();
-      if (batterySOC < 100)
-      {
-        blinkLED();
-      }
-      else
-      {
-        digitalWrite(LED_BLUE, HIGH);
-      }
-    }
-    break;
-
-  // data log mode
-  case 1:
-    // Get the current time
-    currentLogMillis = millis();
-
-    // Check if it's time to run the function
-    if (currentLogMillis - previousLogMillis > DATA_LOG_INTERVAL)
-    {
-      // Run the function
-      logGPSData();
-      // Update the previous time to be the current time
-      previousLogMillis = currentLogMillis;
-    }
-    break;
-    // if the mode value is not covered by the case statements, do something else:
-  default:
-    // insert your code here to handle other mode values
-    break;
+    Serial.print("SHT:\n");
+    Serial.print("  RH: ");
+    Serial.print(SHT30.getHumidity(), 2);
+    Serial.print("\n");
+    Serial.print("  T:  ");
+    Serial.print(SHT30.getTemperature(), 2);
+    Serial.print("\n");
   }
+  else
+  {
+    Serial.print("Error in readSample()\n");
+  }
+
+  delay(1000);
 }

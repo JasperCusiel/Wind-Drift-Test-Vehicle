@@ -47,6 +47,10 @@ int debounceDelay = 20;
 
 // MAX17048 Battery Fuel Gauge
 SFE_MAX1704X lipo(MAX1704X_MAX17048);
+double voltage = 0;
+double soc = 0;
+bool alert;
+
 // SHT30 Temperature and Humidity Sensor
 SHTSensor SHT30;
 float temp, humidity;
@@ -283,7 +287,7 @@ void logGPSData()
     logCount++;
     if (logCount == 5)
     {
-      sprintf(loraBuffer, "%d:%d:%d,%.4f,%.4f,%.0f,%.1f,%.1f,%.1f,%.1f,%.1f", hour, min, sec, gpsLatitude, gpsLongitude, altimeterAltitude, gpsGroundSpeed, gpsHeading, externalTemp, externalHumidity, lipoStateOfCharge);
+      sprintf(loraBuffer, "%d:%d:%d,%.4f,%.4f,%.0f,%.1f,%.1f,%.1f,%.1f,%.1f", hour, min, sec, gpsLatitude, gpsLongitude, altimeterAltitude, gpsGroundSpeed, gpsHeading, externalTemp, externalHumidity, batterySOC);
       LoRa.beginPacket();
       LoRa.write((const uint8_t *)loraBuffer, strlen(loraBuffer));
       LoRa.endPacket(true); // true = async / non-blocking mode
@@ -525,6 +529,10 @@ void loop()
         digitalWrite(LED_BLUE, HIGH);
       }
     }
+    SHT30.readSample();
+    temp = SHT30.getTemperature();
+    humidity = SHT30.getHumidity();
+    Serial.println(String(externalTemp) + " " + String(externalHumidity));
     break;
 
   // data log mode

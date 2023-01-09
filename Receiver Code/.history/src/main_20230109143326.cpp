@@ -47,6 +47,10 @@ int debounceDelay = 20;
 
 // MAX17048 Battery Fuel Gauge
 SFE_MAX1704X lipo(MAX1704X_MAX17048);
+double voltage = 0;
+double soc = 0;
+bool alert;
+
 // SHT30 Temperature and Humidity Sensor
 SHTSensor SHT30;
 float temp, humidity;
@@ -283,7 +287,7 @@ void logGPSData()
     logCount++;
     if (logCount == 5)
     {
-      sprintf(loraBuffer, "%d:%d:%d,%.4f,%.4f,%.0f,%.1f,%.1f,%.1f,%.1f,%.1f", hour, min, sec, gpsLatitude, gpsLongitude, altimeterAltitude, gpsGroundSpeed, gpsHeading, externalTemp, externalHumidity, lipoStateOfCharge);
+      sprintf(loraBuffer, "%d:%d:%d,%.4f,%.4f,%.0f,%.1f,%.1f,%.1f,%.1f,%.1f", hour, min, sec, gpsLatitude, gpsLongitude, altimeterAltitude, gpsGroundSpeed, gpsHeading, externalTemp, externalHumidity, batterySOC);
       LoRa.beginPacket();
       LoRa.write((const uint8_t *)loraBuffer, strlen(loraBuffer));
       LoRa.endPacket(true); // true = async / non-blocking mode
@@ -509,41 +513,80 @@ void loop1()
 
 void loop()
 {
-  switch (mode)
+  // switch (mode)
+  // {
+  // // charge mode
+  // case 0:
+  //   if (!powerButtonPressed)
+  //   {
+  //     batterySOC = lipo.getSOC();
+  //     if (batterySOC < 100)
+  //     {
+  //       blinkLED();
+  //     }
+  //     else
+  //     {
+  //       digitalWrite(LED_BLUE, HIGH);
+  //     }
+  //   }
+  //   break;
+
+  // // data log mode
+  // case 1:
+  //   // Get the current time
+  //   currentLogMillis = millis();
+
+  //   // Check if it's time to run the function
+  //   if (currentLogMillis - previousLogMillis > DATA_LOG_INTERVAL)
+  //   {
+  //     // Run the function
+  //     logGPSData();
+  //     // Update the previous time to be the current time
+  //     previousLogMillis = currentLogMillis;
+  //   }
+  //   break;
+  //   // if the mode value is not covered by the case statements, do something else:
+  // default:
+  //   // insert your code here to handle other mode values
+  //   break;
+  // }
+  // put your main code here, to run repeatedly:
+  byte error, address;
+  int nDevices;
+
+  Serial.println("Scanning...");
+
+  nDevices = 0;
+  for (address = 1; address < 127; address++)
   {
-  // charge mode
-  case 0:
-    if (!powerButtonPressed)
-    {
-      batterySOC = lipo.getSOC();
-      if (batterySOC < 100)
-      {
-        blinkLED();
-      }
-      else
-      {
-        digitalWrite(LED_BLUE, HIGH);
-      }
-    }
-    break;
+    // The i2c_scanner uses the return value of
+    // the Write.endTransmisstion to see if
+    // a device did acknowledge to the address.
+    Wire1.beginTransmission(address);
+    error = Wire1.endTransmission();
 
-  // data log mode
-  case 1:
-    // Get the current time
-    currentLogMillis = millis();
-
-    // Check if it's time to run the function
-    if (currentLogMillis - previousLogMillis > DATA_LOG_INTERVAL)
+    if (error == 0)
     {
-      // Run the function
-      logGPSData();
-      // Update the previous time to be the current time
-      previousLogMillis = currentLogMillis;
+      Serial.print("I2C device found at address 0x");
+      if (address < 16)
+        Serial.print("0");
+      Serial.print(address, HEX);
+      Serial.println("  !");
+
+      nDevices++;
     }
-    break;
-    // if the mode value is not covered by the case statements, do something else:
-  default:
-    // insert your code here to handle other mode values
-    break;
+    else if (error == 4)
+    {
+      Serial.print("Unknow error at address 0x");
+      if (address < 16)
+        Serial.print("0");
+      Serial.println(address, HEX);
+    }
   }
+  if (nDevices == 0)
+    Serial.println("No I2C devices found\n");
+  else
+    Serial.println("done\n");
+
+  delay(5000); // wait 5 seconds for next scan
 }

@@ -9,6 +9,8 @@
 #include <OneButton.h>
 #include <SdFat.h>
 #include <SdFatConfig.h>
+bool loggingData = false;
+volatile bool bufferAvalible = false;
 
 // Status LED
 const int LED_GREEN = 26;
@@ -47,9 +49,12 @@ int debounceDelay = 20;
 
 // MAX17048 Battery Fuel Gauge
 SFE_MAX1704X lipo(MAX1704X_MAX17048);
+double voltage = 0;
+double soc = 0;
+bool alert;
+
 // SHT30 Temperature and Humidity Sensor
 SHTSensor SHT30;
-float temp, humidity;
 
 // LoRa Setup
 const int csPin = 19;
@@ -57,8 +62,6 @@ const int resetPin = 18;
 const int irqPin = 20;
 const int MAX_MESSAGE_LENGTH = 100;
 char message[MAX_MESSAGE_LENGTH];
-int logCount = 0;               // counter to keep track of number of logs made
-const int LOGS_BEFORE_SEND = 5; // number of logs to make before sending lora data ie send lora data every five seconds
 
 // Ublox Neo M9N module
 SFE_UBLOX_GNSS GNSS;
@@ -72,8 +75,8 @@ Adafruit_USBD_MSC usb_msc;
 #define SD_CONFIG SdSpiConfig(PIN_SPI1_SS, SHARED_SPI, SPI_CLOCK, &SPI1)
 SdFat sd;
 // string to buffer output
+String dataBuffer;
 bool fileCreated = false;
-char loraBuffer[250];
 
 // Create a new file with a number one higher than the highest numbered file
 char newFileName[13];
@@ -266,7 +269,6 @@ void logGPSData()
     float gpsHeading = (GNSS.getHeading() * 1E-5);
     int satelitesInView = GNSS.getSIV();
     int fixType = GNSS.getFixType();
-    SHT30.readSample();
     float externalTemp = SHT30.getTemperature();
     float externalHumidity = SHT30.getHumidity();
     float altimeterTemp = altimeter.getTemperature();
@@ -275,23 +277,11 @@ void logGPSData()
     float lipoDischargeRate = lipo.getChangeRate();
     unsigned long timestamp = millis();
 
-    sprintf(dataBuffer, "%d:%d:%d,%d,%.4f,%.4f,%.2f,%.2f,%.2f,%d,%d,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%d", hour, min, sec, timeValid, gpsLatitude, gpsLongitude, gpsAltitude, gpsGroundSpeed, gpsHeading, satelitesInView, fixType, externalTemp, externalHumidity, altimeterTemp, altimeterAltitude, lipoStateOfCharge, lipoDischargeRate, timestamp);
+    sprintf(dataBuffer, "%d:%d:%d,%d,%.2f,%.2f,%.2f,%.2f,%.2f,%d,%d,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%d", hour, min, sec, timeValid, gpsLatitude, gpsLongitude, gpsAltitude, gpsGroundSpeed, gpsHeading, satelitesInView, fixType, externalTemp, externalHumidity, altimeterTemp, altimeterAltitude, lipoStateOfCharge, lipoDischargeRate, timestamp);
 
     dataFile.println(dataBuffer);
     dataFile.close();
     digitalWrite(LED_GREEN, HIGH);
-    logCount++;
-    if (logCount == 5)
-    {
-      sprintf(loraBuffer, "%d:%d:%d,%.4f,%.4f,%.0f,%.1f,%.1f,%.1f,%.1f,%.1f", hour, min, sec, gpsLatitude, gpsLongitude, altimeterAltitude, gpsGroundSpeed, gpsHeading, externalTemp, externalHumidity, lipoStateOfCharge);
-      LoRa.beginPacket();
-      LoRa.write((const uint8_t *)loraBuffer, strlen(loraBuffer));
-      LoRa.endPacket(true); // true = async / non-blocking mode
-      Serial.println("sent lora");
-      Serial.println(strlen(loraBuffer));
-      Serial.println(loraBuffer);
-      logCount = 0;
-    }
   }
   else
   {
@@ -326,8 +316,8 @@ void blinkLED()
 void slowPowerDown()
 {
   noInterrupts();
-  digitalWrite(LED_RED, HIGH);
-  digitalWrite(LED_GREEN, LOW);
+  digitalWrite(LED_RED, LOW);
+  digitalWrite(LED_GREEN, HIGH);
   digitalWrite(LED_BLUE, LOW);
   pinMode(powerButtonPin, OUTPUT);
   digitalWrite(powerButtonPin, LOW);
@@ -359,9 +349,8 @@ void handleLongPress()
   {
     // Toggle the state of the LED
     ledState = !ledState;
-    digitalWrite(LED_RED, ledState);
+    digitalWrite(LED_GREEN, ledState);
     digitalWrite(LED_BLUE, LOW);
-
     // Update the previous time to be the current time
     previousMillis = currentMillis;
   }
@@ -371,7 +360,7 @@ void handleLongPress()
 void handleLongPressStop()
 {
   // Turn off the LED
-  digitalWrite(LED_RED, LOW);
+  digitalWrite(LED_GREEN, LOW);
 
   // Reset the long press start time
   longPressStartTime = 0;
@@ -385,6 +374,7 @@ void handleLongPressStop()
 void setup()
 {
   rp2040.idleOtherCore();
+  noInterrupts();
   pinMode(LED_BLUE, OUTPUT);
   pinMode(LED_RED, OUTPUT);
   pinMode(LED_GREEN, OUTPUT);
@@ -400,8 +390,8 @@ void setup()
     }
   }
   rp2040.resumeOtherCore();
+  interrupts();
   digitalWrite(LED_BLUE, HIGH);
-  digitalWrite(LED_RED, HIGH);
   Serial.begin(9600);
   Wire1.begin();
   Wire.setClock(100000); // Set the I2C clock speed to 100kHz
@@ -437,19 +427,18 @@ void setup()
       Serial.print("SHT30 error");
     }
   }
-  SHT30.setAccuracy(SHTSensor::SHT_ACCURACY_MEDIUM); // only supported by SHT3x
 
   // GPS setup
   while (!GNSS.begin(Wire1)) // Connect to the u-blox module using Wire port
   {
+    iluminateErrorLed();
     Serial.println(F("u-blox GNSS not detected at default I2C address. Please check wiring. Freezing."));
   }
+  digitalWrite(LED_RED, LOW);
   GNSS.setI2COutput(COM_TYPE_UBX);                 // Set the I2C port to output UBX only (turn off NMEA noise)
-  GNSS.setNavigationFrequency(1);                  // Set output to 1 times a second
+  GNSS.setNavigationFrequency(5);                  // Set output to 10 times a second
   GNSS.saveConfigSelective(VAL_CFG_SUBSEC_IOPORT); // Save (only) the communications port settings to flash and BBR
   Serial.println("intialization done");
-  digitalWrite(LED_BLUE, LOW);
-  digitalWrite(LED_RED, LOW);
 }
 
 void setup1()
