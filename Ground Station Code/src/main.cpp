@@ -61,18 +61,15 @@ float vehicleHeading = 0.0;
 int count = 0;
 int tick = 0;
 int pageNum = 0;
-float testLat = 00.0000;
-float testLong = 000.0000;
+double testLat = 00.000000;
+double testLong = 00.000000;
 bool testSend = false;
 bool testReceive = true;
 int testHeading = 0;
-double testAltitude = 0;
+float testAltitude = 0;
 int testTemp = 0;
 int testHumdity = 0;
 int testGroundSpeed = 0;
-double lastAltitude = 0;
-float lastLat = 0.0;
-float lastLong = 0.0;
 
 // Create a new file with a number one higher than the highest numbered file
 char newFileName[13];
@@ -393,9 +390,9 @@ void drawAltimeterPage(int alt)
     drawAltimeter(angleMapThousandths, angleMapHundredths);
 }
 
-void drawGpsPage(float latitude, float longitude)
+void drawGpsPage(double latitude, double longitude)
 {
-    int latDegrees = latitude;
+    double latDegrees = latitude;
     int latMin = (latitude - latDegrees) * 60;
     float latSec = (((latitude - latDegrees) * 60) - latMin) * 60;
     char latitudeDMS[16];
@@ -403,7 +400,7 @@ void drawGpsPage(float latitude, float longitude)
     dtostrf(abs(latSec), 4, 1, latSec1DP);
     sprintf(latitudeDMS, "%d° %d' %s\"", abs(latDegrees), abs(latMin), latSec1DP);
 
-    int longDegrees = longitude;
+    double longDegrees = longitude;
     int longMin = (longitude - longDegrees) * 60;
     float longSec = (((longitude - longDegrees) * 60) - longMin) * 60;
     char longitudeDMS[16];
@@ -686,10 +683,11 @@ void loop()
             Serial.print("shit");
         }
         Serial.println(message);
-        float latitude, longitude, groundSpeed, trackOverGround, temp, humidity, bat;
-        int hour, min, sec, altitute;
+        double latitude, longitude;
+        float groundSpeed, trackOverGround, temp, humidity, bat;
+        int hour, min, sec, millisec, altitute;
 
-        sscanf(message, "%d:%d:%d,%f,%f,%d,%f,%f,%f,%f,%f", &hour, &min, &sec, &latitude, &longitude, &altitute, &groundSpeed, &trackOverGround, &temp, &humidity, &bat);
+        sscanf(message, "%d:%d:%d.%d,%f,%f,%d,%f,%f,%f,%f,%f", &hour, &min, &sec, &millisec, &latitude, &longitude, &altitute, &groundSpeed, &trackOverGround, &temp, &humidity, &bat);
         testLat = latitude;
         testLong = longitude;
         testAltitude = (altitute * 3.28084);
