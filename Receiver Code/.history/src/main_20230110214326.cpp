@@ -22,8 +22,8 @@ const int OFF_TIME = 2500; // LED off time in milliseconds
 uint8_t ppsLedCount = 0;
 int previousPPSState = LOW; // store the previous state of the pin
 
-// Time (in milliseconds) to hold the button to initiate power down (add about 2000 millisec for shut down function)
-const int POWER_DOWN_TIME = 4000;
+// Time (in milliseconds) to hold the button to initiate power down
+const int POWER_DOWN_TIME = 6000;
 
 // Timestamp of the last time the LED state was updated
 unsigned long lastUpdateTime = 0;
@@ -69,6 +69,9 @@ volatile bool loraBufferAvalible;
 // Ublox Neo M9N module
 SFE_UBLOX_GNSS GNSS;
 const int ppsPin = 17;
+
+// timers to only sample once per second when gps time isn't synced
+unsigned long lastGnssTime;
 
 // USB Mass Storage object
 Adafruit_USBD_MSC usb_msc;
@@ -258,44 +261,49 @@ float getAltitude()
 
 void logGPSData()
 {
-  int time2 = millis();
-  char dataBuffer[100];
-  uint8_t hour = GNSS.getHour();
-  uint8_t min = GNSS.getMinute();
-  uint8_t sec = GNSS.getSecond();
-  uint16_t millisecs = GNSS.getMillisecond();
-  double gpsLongitude = ((GNSS.getLongitude()) * 1E-7);
-  double gpsLatitude = ((GNSS.getLatitude()) * 1E-7);
-  float gpsAltitude = ((GNSS.getAltitudeMSL()) * 1E-3);
-  float gpsGroundSpeed = ((GNSS.getGroundSpeed()) * 1E-3); // Ground Speed (2-D): m/s
-  float gpsHeading = ((GNSS.getHeading()) * 1E-5);         // Heading of motion (2-D): deg
-  uint8_t satelitesInView = GNSS.getSIV();                 // Number of satellites used in Nav Solution
-  uint8_t fixType = GNSS.getFixType();
-  bool timeValid = GNSS.getTimeValid();
-  float externalTemp = SHT30.getTemperature();
-  float externalHumidity = SHT30.getHumidity();
-  float altimeterTemp = altimeter.getTemperature();
-  float altimeterAltitude = getAltitude();
-  float lipoStateOfCharge = lipo.getSOC();
-  float lipoDischargeRate = lipo.getChangeRate();
+  if (GNSS.getTimeValid())
+  {
+    char dataBuffer[100];
+    uint8_t hour = GNSS.getHour();
+    uint8_t min = GNSS.getMinute();
+    uint8_t sec = GNSS.getSecond();
+    uint16_t millisecs = GNSS.getMillisecond();
+    double gpsLongitude = ((GNSS.getLongitude()) * 1E-7);
+    double gpsLatitude = ((GNSS.getLatitude()) * 1E-7);
+    float gpsAltitude = ((GNSS.getAltitudeMSL()) * 1E-3);
+    float gpsGroundSpeed = ((GNSS.getGroundSpeed()) * 1E-3); // Ground Speed (2-D): m/s
+    float gpsHeading = ((GNSS.getHeading()) * 1E-5);         // Heading of motion (2-D): deg
+    uint8_t satelitesInView = GNSS.getSIV();                 // Number of satellites used in Nav Solution
+    uint8_t fixType = GNSS.getFixType();
+    bool timeValid = GNSS.getTimeValid();
+    float externalTemp = SHT30.getTemperature();
+    float externalHumidity = SHT30.getHumidity();
+    float altimeterTemp = altimeter.getTemperature();
+    float altimeterAltitude = getAltitude();
+    float lipoStateOfCharge = lipo.getSOC();
+    float lipoDischargeRate = lipo.getChangeRate();
 
-  sprintf(dataBuffer, "%d:%d:%d.%d,%d,%.6f,%.6f,%.2f,%.2f,%.2f,%d,%d,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f", hour, min, sec, millisecs, timeValid, gpsLatitude, gpsLongitude, gpsAltitude, gpsGroundSpeed, gpsHeading, satelitesInView, fixType, externalTemp, externalHumidity, altimeterTemp, altimeterAltitude, lipoStateOfCharge, lipoDischargeRate);
-  noInterrupts();
-  dataFile.println(dataBuffer);
-  if (!dataFile.sync())
-  {
-    iluminateErrorLed();
-    return;
+    sprintf(dataBuffer, "%d:%d:%d.%d,%d,%.6f,%.6f,%.2f,%.2f,%.2f,%d,%d,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f", hour, min, sec, millisecs, timeValid, gpsLatitude, gpsLongitude, gpsAltitude, gpsGroundSpeed, gpsHeading, satelitesInView, fixType, externalTemp, externalHumidity, altimeterTemp, altimeterAltitude, lipoStateOfCharge, lipoDischargeRate);
+    noInterrupts();
+    dataFile.println(dataBuffer);
+    if (!dataFile.sync())
+    {
+      iluminateErrorLed();
+      return;
+    }
+    digitalWrite(LED_GREEN, HIGH);
+    interrupts();
+    logCount++;
+    if (logCount == 10)
+    {
+      loraBufferAvalible = false;
+      sprintf(loraBuffer, "%d:%d:%d.%d,%.6f,%.6f,%d,%.1f,%.1f,%.1f,%.1f,%.1f", hour, min, sec, gpsLatitude, gpsLongitude, altimeterAltitude, gpsGroundSpeed, gpsHeading, externalTemp, externalHumidity, lipoStateOfCharge);
+      loraBufferAvalible = true;
+      logCount = 0;
+    }
   }
-  digitalWrite(LED_GREEN, HIGH);
-  interrupts();
-  logCount++;
-  if (logCount == 10)
+  else
   {
-    loraBufferAvalible = false;
-    sprintf(loraBuffer, "%d:%d:%d.%d,%.6f,%.6f,%d,%.1f,%.1f,%.1f,%.1f,%.1f", hour, min, sec, gpsLatitude, gpsLongitude, altimeterAltitude, gpsGroundSpeed, gpsHeading, externalTemp, externalHumidity, lipoStateOfCharge);
-    loraBufferAvalible = true;
-    logCount = 0;
   }
 }
 void buttonDoubleClick()
@@ -321,7 +329,6 @@ void blinkLED()
 
 void slowPowerDown()
 {
-  dataFile.close();
   noInterrupts();
   pinMode(powerButtonPin, OUTPUT);
   digitalWrite(powerButtonPin, LOW);
@@ -449,15 +456,15 @@ void setup()
   // Here is how to set the frequency:
 
   // When the module is _locked_ to GNSS time, make it generate 10Hz
-  timePulseParameters.freqPeriod = 1;            // Set the frequency/period to 1Hz
-  timePulseParameters.pulseLenRatio = 50000;     // Set the period to 50,000 us
-  timePulseParameters.freqPeriodLock = 10;       // Set the frequency/period to 10Hz
-  timePulseParameters.pulseLenRatioLock = 50000; // Set the period to 50,000 us
+  timePulseParameters.freqPeriod = 1;                 // Set the frequency/period to 10Hz
+  timePulseParameters.pulseLenRatio = 0x80000000;     // Set the pulse ratio to 1/2 * 2^32 to produce 50:50 mark:space
+  timePulseParameters.freqPeriodLock = 10;            // Set the frequency/period to 10Hz
+  timePulseParameters.pulseLenRatioLock = 0x80000000; // Set the pulse ratio to 1/2 * 2^32 to produce 50:50 mark:space
 
   timePulseParameters.flags.bits.active = 1;         // Make sure the active flag is set to enable the time pulse. (Set to 0 to disable.)
   timePulseParameters.flags.bits.lockedOtherSet = 1; // Tell the module to use freqPeriod while locking and freqPeriodLock when locked to GNSS time
   timePulseParameters.flags.bits.isFreq = 1;         // Tell the module that we want to set the frequency (not the period)
-  timePulseParameters.flags.bits.isLength = 1;       // Tell the module that pulseLenRatio is a length (in us) - not a duty cycle
+  timePulseParameters.flags.bits.isLength = 0;       // Tell the module that pulseLenRatio is a ratio / duty cycle (* 2^-32) - not a length (in us)
   timePulseParameters.flags.bits.polarity = 1;       // Tell the module that we want the rising edge at the top of second. (Set to 0 for falling edge.)
 
   // Now set the time pulse parameters
@@ -571,8 +578,7 @@ void loop()
 
   // data log mode
   case 1:
-
-    if ((digitalRead(ppsPin) == HIGH))
+    if (digitalRead(ppsPin) == HIGH)
     {
       logGPSData();
     }

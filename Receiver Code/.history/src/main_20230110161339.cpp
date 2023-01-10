@@ -17,13 +17,8 @@ const int LED_BLUE = 27;
 // Global variables to store the current state and time of the LED
 const int ON_TIME = 250;   // LED on time in milliseconds
 const int OFF_TIME = 2500; // LED off time in milliseconds
-
-// for led blink
-uint8_t ppsLedCount = 0;
-int previousPPSState = LOW; // store the previous state of the pin
-
-// Time (in milliseconds) to hold the button to initiate power down (add about 2000 millisec for shut down function)
-const int POWER_DOWN_TIME = 4000;
+// Time (in milliseconds) to hold the button to initiate power down
+const int POWER_DOWN_TIME = 6000;
 
 // Timestamp of the last time the LED state was updated
 unsigned long lastUpdateTime = 0;
@@ -62,9 +57,9 @@ const int resetPin = 18;
 const int irqPin = 20;
 const int MAX_MESSAGE_LENGTH = 100;
 char message[MAX_MESSAGE_LENGTH];
-int logCount = 0;                    // counter to keep track of number of logs made
-const int TIME_BETWEEN_SENDS = 2000; // delay between lora sends
-volatile bool loraBufferAvalible;
+int logCount = 0;               // counter to keep track of number of logs made
+const int LOGS_BEFORE_SEND = 5; // number of logs to make before sending lora data ie send lora data every five seconds
+bool loraBufferAvalible;
 
 // Ublox Neo M9N module
 SFE_UBLOX_GNSS GNSS;
@@ -231,7 +226,7 @@ bool createDataLoggingFile()
     {
       Serial.print("Created new file: ");
       Serial.println(newFileName);
-      dataFile.print("Time UTC (H:M:S),Time Valid (0 = Invalid 1 = Valid),Longitude (DD°),Latitude (DD°),GPS Altitude (m),GPS Ground Speed (m/s),GPS Track Over Ground (deg°),Satellites In View, Fix Type (0 = No Fix 3 = 3D 4 = GNSS 5 = Time Fix), Primary Temperature (C°), Humidity (RH%), Altimeter Temperature (C°), Altitude Relative To Sea Level (1013.25 mBar) (m), Battery Percentage, Battery Discharge Rate (%/h)");
+      dataFile.print("Time UTC (H:M:S),Time Valid (0 = Invalid 1 = Valid),Longitude (DD°),Latitude (DD°),GPS Altitude (m),GPS Ground Speed (m/s),GPS Track Over Ground (deg°),Satellites In View, Fix Type (0 = No Fix 3 = 3D 4 = GNSS 5 = Time Fix), Primary Temperature (C°), Humidity (RH%), Altimeter Temperature (C°), Altitude Relative To Sea Level (1013.25 mBar) (m), Battery Percentage, Battery Discharge Rate (%/h), Time Since Power On (ms)");
       dataFile.println();
       dataFile.sync();
       return true;
@@ -256,21 +251,28 @@ float getAltitude()
   return altitude;
 }
 
-void logGPSData()
+void logGPSData(UBX_NAV_PVT_data_t *ubxDataStruct)
 {
+  // SdFile dataFile;
+  // if (dataFile.open(newFileName, FILE_WRITE))
+  // {
+
+  //   dataFile.println(dataBuffer);
+  //   dataFile.close();
+  //   digitalWrite(LED_GREEN, HIGH);
   int time2 = millis();
   char dataBuffer[100];
-  uint8_t hour = GNSS.getHour();
-  uint8_t min = GNSS.getMinute();
-  uint8_t sec = GNSS.getSecond();
-  uint16_t millisecs = GNSS.getMillisecond();
-  double gpsLongitude = ((GNSS.getLongitude()) * 1E-7);
-  double gpsLatitude = ((GNSS.getLatitude()) * 1E-7);
-  float gpsAltitude = ((GNSS.getAltitudeMSL()) * 1E-3);
-  float gpsGroundSpeed = ((GNSS.getGroundSpeed()) * 1E-3); // Ground Speed (2-D): m/s
-  float gpsHeading = ((GNSS.getHeading()) * 1E-5);         // Heading of motion (2-D): deg
-  uint8_t satelitesInView = GNSS.getSIV();                 // Number of satellites used in Nav Solution
-  uint8_t fixType = GNSS.getFixType();
+  uint8_t hour = ubxDataStruct->hour;
+  uint8_t min = ubxDataStruct->min;
+  uint8_t sec = ubxDataStruct->sec;
+  unsigned long millisecs = ubxDataStruct->iTOW % 1000;
+  float gpsLongitude = ((ubxDataStruct->lat) * 1E-7);
+  float gpsLatitude = ((ubxDataStruct->lon) * 1E-7);
+  float gpsAltitude = ((ubxDataStruct->hMSL) * 1E-3);
+  float gpsGroundSpeed = ((ubxDataStruct->gSpeed) * 1E-3); // Ground Speed (2-D): m/s
+  float gpsHeading = ((ubxDataStruct->headMot) * 1E-5);    // Heading of motion (2-D): deg
+  uint8_t satelitesInView = ubxDataStruct->numSV;          // Number of satellites used in Nav Solution
+  uint8_t fixType = ubxDataStruct->fixType;
   bool timeValid = GNSS.getTimeValid();
   float externalTemp = SHT30.getTemperature();
   float externalHumidity = SHT30.getHumidity();
@@ -279,27 +281,27 @@ void logGPSData()
   float lipoStateOfCharge = lipo.getSOC();
   float lipoDischargeRate = lipo.getChangeRate();
 
-  sprintf(dataBuffer, "%d:%d:%d.%d,%d,%.6f,%.6f,%.2f,%.2f,%.2f,%d,%d,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f", hour, min, sec, millisecs, timeValid, gpsLatitude, gpsLongitude, gpsAltitude, gpsGroundSpeed, gpsHeading, satelitesInView, fixType, externalTemp, externalHumidity, altimeterTemp, altimeterAltitude, lipoStateOfCharge, lipoDischargeRate);
+  sprintf(dataBuffer, "%d:%d:%d.%d,%d,%.4f,%.4f,%.2f,%.2f,%.2f,%d,%d,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f", hour, min, sec, millisecs, timeValid, gpsLatitude, gpsLongitude, gpsAltitude, gpsGroundSpeed, gpsHeading, satelitesInView, fixType, externalTemp, externalHumidity, altimeterTemp, altimeterAltitude, lipoStateOfCharge, lipoDischargeRate);
   noInterrupts();
-  dataFile.println(dataBuffer);
-  if (!dataFile.sync())
-  {
-    iluminateErrorLed();
-    return;
-  }
-  digitalWrite(LED_GREEN, HIGH);
+  int bytesWritten = dataFile.println(dataBuffer);
+  dataFile.sync();
   interrupts();
+  int time3 = millis();
+  lastTime = time2;
+  Serial.println(time3 - time2);
   logCount++;
   if (logCount == 10)
   {
     loraBufferAvalible = false;
-    sprintf(loraBuffer, "%d:%d:%d.%d,%.6f,%.6f,%d,%.1f,%.1f,%.1f,%.1f,%.1f", hour, min, sec, gpsLatitude, gpsLongitude, altimeterAltitude, gpsGroundSpeed, gpsHeading, externalTemp, externalHumidity, lipoStateOfCharge);
+    sprintf(loraBuffer, "%d:%d:%d,%.4f,%.4f,%.0f,%.1f,%.1f,%.1f,%.1f,%.1f", hour, min, sec, gpsLatitude, gpsLongitude, altimeterAltitude, gpsGroundSpeed, gpsHeading, externalTemp, externalHumidity, lipoStateOfCharge);
     loraBufferAvalible = true;
     logCount = 0;
   }
+  Serial.println("here");
 }
 void buttonDoubleClick()
 {
+  Serial.println("double clicked");
   mode = 1;
 }
 // Function to blink the LED
@@ -318,11 +320,12 @@ void blinkLED()
     previousMillis = currentMillis;
   }
 }
-
 void slowPowerDown()
 {
-  dataFile.close();
   noInterrupts();
+  digitalWrite(LED_RED, HIGH);
+  digitalWrite(LED_GREEN, LOW);
+  digitalWrite(LED_BLUE, LOW);
   pinMode(powerButtonPin, OUTPUT);
   digitalWrite(powerButtonPin, LOW);
   while (1)
@@ -345,16 +348,38 @@ void handleLongPress()
   {
     slowPowerDown();
   }
+  // Get the current time
+  unsigned long currentMillis = millis();
+
+  // Check if it's time to change the state of the LED
+  if (currentMillis - previousMillis > (ledState ? 500 : 500))
+  {
+    // Toggle the state of the LED
+    ledState = !ledState;
+    digitalWrite(LED_RED, ledState);
+    digitalWrite(LED_BLUE, LOW);
+
+    // Update the previous time to be the current time
+    previousMillis = currentMillis;
+  }
 }
 
 // This function will be called when the button is released after a long press
 void handleLongPressStop()
 {
+  // Turn off the LED
+  digitalWrite(LED_RED, LOW);
+
   // Reset the long press start time
   longPressStartTime = 0;
   powerButtonPressed = false;
 }
 
+void onTxDone()
+{
+  Serial.println("done");
+  Serial.println(millis());
+}
 boolean runEvery(unsigned long interval)
 {
   static unsigned long previousMillis = 0;
@@ -388,10 +413,9 @@ void setup()
     {
     }
   }
+  rp2040.resumeOtherCore();
   digitalWrite(LED_BLUE, HIGH);
   digitalWrite(LED_RED, HIGH);
-  rp2040.resumeOtherCore();
-
   Serial.begin(9600);
   Wire1.begin();
   Wire1.setClock(400000);
@@ -400,31 +424,35 @@ void setup()
   if (!altimeter.begin(Wire1))
   {
     iluminateErrorLed();
-    Serial.println("MS5637 sensor did not respond. Please check wiring.");
-    return;
+    while (1)
+    {
+      Serial.println("MS5637 sensor did not respond. Please check wiring.");
+    }
   }
-
   altimeter.setResolution(ms5637_resolution_osr_2048); // 5ms per reading, 0.028mbar resolution
-
   // MAX17048 Battery Fuel Gauge start
   if (!lipo.begin(Wire1)) // Connect to the MAX17043 using non-standard wire port
   {
     iluminateErrorLed();
-    Serial.println(F("MAX17048 not detected."));
-    return;
+    while (1)
+    {
+      Serial.println(F("MAX17048 not detected."));
+    }
   }
-
   lipo.setThreshold(20);
 
   // SHT30 Temperature and Humidity Sensor Initalization
   if (!SHT30.init(Wire1))
   {
     iluminateErrorLed();
-    Serial.print("SHT30 error");
-    return;
+    while (1)
+    {
+      Serial.print("SHT30 error");
+    }
   }
-
-  SHT30.setAccuracy(SHTSensor::SHT_ACCURACY_HIGH); // only supported by SHT3x
+  SHT30.setAccuracy(SHTSensor::SHT_ACCURACY_MEDIUM); // only supported by SHT3x
+  Serial.begin(9600);
+  Serial1.begin(38400);
 
   Serial1.begin(38400);
   if (!GNSS.begin(Serial1))
@@ -432,45 +460,13 @@ void setup()
     Serial.println("gps not started");
     return;
   }
+  Serial.println("GNSS serial connected");
 
-  // Create storage for the time pulse parameters
-  UBX_CFG_TP5_data_t timePulseParameters;
-
-  // Get the time pulse parameters
-  if (!GNSS.getTimePulseParameters(&timePulseParameters))
-  {
-    Serial.println(F("getTimePulseParameters failed!"));
-    return;
-  }
-
-  timePulseParameters.tpIdx = 0; // Select the TIMEPULSE pin
-
-  // We can configure the time pulse pin to produce a defined frequency or period
-  // Here is how to set the frequency:
-
-  // When the module is _locked_ to GNSS time, make it generate 10Hz
-  timePulseParameters.freqPeriod = 1;            // Set the frequency/period to 1Hz
-  timePulseParameters.pulseLenRatio = 50000;     // Set the period to 50,000 us
-  timePulseParameters.freqPeriodLock = 10;       // Set the frequency/period to 10Hz
-  timePulseParameters.pulseLenRatioLock = 50000; // Set the period to 50,000 us
-
-  timePulseParameters.flags.bits.active = 1;         // Make sure the active flag is set to enable the time pulse. (Set to 0 to disable.)
-  timePulseParameters.flags.bits.lockedOtherSet = 1; // Tell the module to use freqPeriod while locking and freqPeriodLock when locked to GNSS time
-  timePulseParameters.flags.bits.isFreq = 1;         // Tell the module that we want to set the frequency (not the period)
-  timePulseParameters.flags.bits.isLength = 1;       // Tell the module that pulseLenRatio is a length (in us) - not a duty cycle
-  timePulseParameters.flags.bits.polarity = 1;       // Tell the module that we want the rising edge at the top of second. (Set to 0 for falling edge.)
-
-  // Now set the time pulse parameters
-  if (GNSS.setTimePulseParameters(&timePulseParameters) == false)
-  {
-    Serial.println("setTimePulseParameters failed!");
-    return;
-  }
-
-  GNSS.setUART1Output(COM_TYPE_UBX); // Set the UART port to output UBX only
-  GNSS.setI2COutput(COM_TYPE_UBX);   // Set the I2C port to output UBX only (turn off NMEA noise)
-  GNSS.setNavigationFrequency(10);   // Set output to 5 times a second
-  GNSS.saveConfiguration();          // Save the current settings to flash and BBR
+  GNSS.setUART1Output(COM_TYPE_UBX);       // Set the UART port to output UBX only
+  GNSS.setI2COutput(COM_TYPE_UBX);         // Set the I2C port to output UBX only (turn off NMEA noise)
+  GNSS.setNavigationFrequency(10);         // Set output to 5 times a second
+  GNSS.saveConfiguration();                // Save the current settings to flash and BBR
+  GNSS.setAutoPVTcallbackPtr(&logGPSData); // Enable automatic NAV PVT messages with callback to printPVTdata
   digitalWrite(LED_BLUE, LOW);
   digitalWrite(LED_RED, LOW);
 }
@@ -478,14 +474,15 @@ void setup()
 void setup1()
 {
   LoRa.setPins(csPin, resetPin, irqPin);
-
   if (!LoRa.begin(915E6))
   {
     iluminateErrorLed();
-    Serial.println("LoRa init failed. Check your connections.");
-    return;
+    while (1)
+    {
+      Serial.println("LoRa init failed. Check your connections.");
+    }
   }
-
+  LoRa.onTxDone(onTxDone);
   if (!sd.begin(SD_CONFIG))
   {
     Serial.println("initialization failed. Things to check:");
@@ -493,19 +490,21 @@ void setup1()
     Serial.println("* is your wiring correct?");
     Serial.println("* did you change the chipSelect pin to match your shield or module?");
     iluminateErrorLed();
-    Serial.println("SD failed");
-    return;
+    while (1)
+    {
+      Serial.println("SD failed");
+    }
   }
-
   fileCreated = createDataLoggingFile();
-
   if (!fileCreated)
   {
     iluminateErrorLed();
-    Serial.println("datalogging file failed");
-    return;
+    while (1)
+    {
+      Serial.println("datalogging file failed");
+    }
   }
-
+  Serial.println(newFileName);
   bootSelectButton.attachDoubleClick(buttonDoubleClick);
   powerButton.attachDuringLongPress(handleLongPress);
   powerButton.attachLongPressStop(handleLongPressStop);
@@ -515,45 +514,35 @@ void loop1()
 {
   if (mode == 1)
   {
-    if (runEvery(TIME_BETWEEN_SENDS))
-    { // repeat every 2000 millis
-      if (!loraBufferAvalible)
-      {
-        return;
-      }
-      // Serial.print("Sending packet non-blocking: ");
-      // Serial.println(loraBuffer);
-      //  send in async / non-blocking mode
-      LoRa.beginPacket();
-      LoRa.write((const uint8_t *)loraBuffer, strlen(loraBuffer));
-      LoRa.endPacket(true); // true = async / non-blocking mode
+    int pulsePinGPS = digitalRead(ppsPin);
+    if (pulsePinGPS == HIGH)
+    {
+      digitalWrite(LED_BLUE, HIGH);
     }
-    int currentPPSState = digitalRead(ppsPin); // read the current state of the pin
-    if (currentPPSState != previousPPSState)
-    { // if the state has changed
-      if (currentPPSState == HIGH)
-      {
-        if ((ppsLedCount++) == 10)
-        {
-          digitalWrite(LED_BLUE, HIGH);
-          ppsLedCount = 0;
-        }
-        else
-        {
-          digitalWrite(LED_BLUE, LOW);
-        }
-      }
+    else
+    {
+      digitalWrite(LED_BLUE, LOW);
     }
-    previousPPSState = currentPPSState; // update the previous state with the current state
   }
-  powerButton.tick();
   bootSelectButton.tick();
+  powerButton.tick();
+  if (runEvery(2000) && loraBufferAvalible)
+  { // repeat every 2000 millis
+
+    Serial.print("Sending packet non-blocking: ");
+    Serial.println(loraBuffer);
+    // send in async / non-blocking mode
+    LoRa.beginPacket();
+    LoRa.write((const uint8_t *)loraBuffer, strlen(loraBuffer));
+    LoRa.endPacket(true); // true = async / non-blocking mode
+  }
 }
 
 void loop()
 {
   switch (mode)
   {
+  // charge mode
   case 0:
     if (!powerButtonPressed)
     {
@@ -571,11 +560,8 @@ void loop()
 
   // data log mode
   case 1:
-
-    if ((digitalRead(ppsPin) == HIGH))
-    {
-      logGPSData();
-    }
+    GNSS.checkUblox();     // Check for the arrival of new data and process it.
+    GNSS.checkCallbacks(); // Check if any callbacks are waiting to be processed.
     break;
     // if the mode value is not covered by the case statements, do something else:
   default:

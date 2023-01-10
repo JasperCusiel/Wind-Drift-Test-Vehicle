@@ -18,12 +18,11 @@ const int LED_BLUE = 27;
 const int ON_TIME = 250;   // LED on time in milliseconds
 const int OFF_TIME = 2500; // LED off time in milliseconds
 
-// for led blink
 uint8_t ppsLedCount = 0;
 int previousPPSState = LOW; // store the previous state of the pin
 
-// Time (in milliseconds) to hold the button to initiate power down (add about 2000 millisec for shut down function)
-const int POWER_DOWN_TIME = 4000;
+// Time (in milliseconds) to hold the button to initiate power down
+const int POWER_DOWN_TIME = 6000;
 
 // Timestamp of the last time the LED state was updated
 unsigned long lastUpdateTime = 0;
@@ -264,8 +263,8 @@ void logGPSData()
   uint8_t min = GNSS.getMinute();
   uint8_t sec = GNSS.getSecond();
   uint16_t millisecs = GNSS.getMillisecond();
-  double gpsLongitude = ((GNSS.getLongitude()) * 1E-7);
-  double gpsLatitude = ((GNSS.getLatitude()) * 1E-7);
+  float gpsLongitude = ((GNSS.getLongitude()) * 1E-7);
+  float gpsLatitude = ((GNSS.getLatitude()) * 1E-7);
   float gpsAltitude = ((GNSS.getAltitudeMSL()) * 1E-3);
   float gpsGroundSpeed = ((GNSS.getGroundSpeed()) * 1E-3); // Ground Speed (2-D): m/s
   float gpsHeading = ((GNSS.getHeading()) * 1E-5);         // Heading of motion (2-D): deg
@@ -293,7 +292,7 @@ void logGPSData()
   if (logCount == 10)
   {
     loraBufferAvalible = false;
-    sprintf(loraBuffer, "%d:%d:%d.%d,%.6f,%.6f,%d,%.1f,%.1f,%.1f,%.1f,%.1f", hour, min, sec, gpsLatitude, gpsLongitude, altimeterAltitude, gpsGroundSpeed, gpsHeading, externalTemp, externalHumidity, lipoStateOfCharge);
+    sprintf(loraBuffer, "%d:%d:%d.%d,%.6f,%.6f,%.0f,%.1f,%.1f,%.1f,%.1f,%.1f", hour, min, sec, gpsLatitude, gpsLongitude, altimeterAltitude, gpsGroundSpeed, gpsHeading, externalTemp, externalHumidity, lipoStateOfCharge);
     loraBufferAvalible = true;
     logCount = 0;
   }
@@ -321,7 +320,6 @@ void blinkLED()
 
 void slowPowerDown()
 {
-  dataFile.close();
   noInterrupts();
   pinMode(powerButtonPin, OUTPUT);
   digitalWrite(powerButtonPin, LOW);
@@ -444,20 +442,19 @@ void setup()
   }
 
   timePulseParameters.tpIdx = 0; // Select the TIMEPULSE pin
+  // timePulseParameters.tpIdx = 1; // Or we could select the TIMEPULSE2 pin instead, if the module has one
 
   // We can configure the time pulse pin to produce a defined frequency or period
   // Here is how to set the frequency:
 
   // When the module is _locked_ to GNSS time, make it generate 10Hz
-  timePulseParameters.freqPeriod = 1;            // Set the frequency/period to 1Hz
-  timePulseParameters.pulseLenRatio = 50000;     // Set the period to 50,000 us
-  timePulseParameters.freqPeriodLock = 10;       // Set the frequency/period to 10Hz
-  timePulseParameters.pulseLenRatioLock = 50000; // Set the period to 50,000 us
+  timePulseParameters.freqPeriodLock = 10;            // Set the frequency/period to 10Hz
+  timePulseParameters.pulseLenRatioLock = 0x80000000; // Set the pulse ratio to 1/2 * 2^32 to produce 50:50 mark:space
 
   timePulseParameters.flags.bits.active = 1;         // Make sure the active flag is set to enable the time pulse. (Set to 0 to disable.)
   timePulseParameters.flags.bits.lockedOtherSet = 1; // Tell the module to use freqPeriod while locking and freqPeriodLock when locked to GNSS time
   timePulseParameters.flags.bits.isFreq = 1;         // Tell the module that we want to set the frequency (not the period)
-  timePulseParameters.flags.bits.isLength = 1;       // Tell the module that pulseLenRatio is a length (in us) - not a duty cycle
+  timePulseParameters.flags.bits.isLength = 0;       // Tell the module that pulseLenRatio is a ratio / duty cycle (* 2^-32) - not a length (in us)
   timePulseParameters.flags.bits.polarity = 1;       // Tell the module that we want the rising edge at the top of second. (Set to 0 for falling edge.)
 
   // Now set the time pulse parameters
@@ -571,8 +568,7 @@ void loop()
 
   // data log mode
   case 1:
-
-    if ((digitalRead(ppsPin) == HIGH))
+    if (digitalRead(ppsPin) == HIGH)
     {
       logGPSData();
     }

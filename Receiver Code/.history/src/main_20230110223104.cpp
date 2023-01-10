@@ -22,8 +22,8 @@ const int OFF_TIME = 2500; // LED off time in milliseconds
 uint8_t ppsLedCount = 0;
 int previousPPSState = LOW; // store the previous state of the pin
 
-// Time (in milliseconds) to hold the button to initiate power down (add about 2000 millisec for shut down function)
-const int POWER_DOWN_TIME = 4000;
+// Time (in milliseconds) to hold the button to initiate power down
+const int POWER_DOWN_TIME = 6000;
 
 // Timestamp of the last time the LED state was updated
 unsigned long lastUpdateTime = 0;
@@ -321,7 +321,6 @@ void blinkLED()
 
 void slowPowerDown()
 {
-  dataFile.close();
   noInterrupts();
   pinMode(powerButtonPin, OUTPUT);
   digitalWrite(powerButtonPin, LOW);

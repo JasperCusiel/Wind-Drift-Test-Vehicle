@@ -18,12 +18,10 @@ const int LED_BLUE = 27;
 const int ON_TIME = 250;   // LED on time in milliseconds
 const int OFF_TIME = 2500; // LED off time in milliseconds
 
-// for led blink
 uint8_t ppsLedCount = 0;
-int previousPPSState = LOW; // store the previous state of the pin
 
-// Time (in milliseconds) to hold the button to initiate power down (add about 2000 millisec for shut down function)
-const int POWER_DOWN_TIME = 4000;
+// Time (in milliseconds) to hold the button to initiate power down
+const int POWER_DOWN_TIME = 6000;
 
 // Timestamp of the last time the LED state was updated
 unsigned long lastUpdateTime = 0;
@@ -231,7 +229,7 @@ bool createDataLoggingFile()
     {
       Serial.print("Created new file: ");
       Serial.println(newFileName);
-      dataFile.print("Time UTC (H:M:S),Time Valid (0 = Invalid 1 = Valid),Longitude (DD°),Latitude (DD°),GPS Altitude (m),GPS Ground Speed (m/s),GPS Track Over Ground (deg°),Satellites In View, Fix Type (0 = No Fix 3 = 3D 4 = GNSS 5 = Time Fix), Primary Temperature (C°), Humidity (RH%), Altimeter Temperature (C°), Altitude Relative To Sea Level (1013.25 mBar) (m), Battery Percentage, Battery Discharge Rate (%/h)");
+      dataFile.print("Time UTC (H:M:S),Time Valid (0 = Invalid 1 = Valid),Longitude (DD°),Latitude (DD°),GPS Altitude (m),GPS Ground Speed (m/s),GPS Track Over Ground (deg°),Satellites In View, Fix Type (0 = No Fix 3 = 3D 4 = GNSS 5 = Time Fix), Primary Temperature (C°), Humidity (RH%), Altimeter Temperature (C°), Altitude Relative To Sea Level (1013.25 mBar) (m), Battery Percentage, Battery Discharge Rate (%/h), Time Since Power On (ms)");
       dataFile.println();
       dataFile.sync();
       return true;
@@ -264,8 +262,8 @@ void logGPSData()
   uint8_t min = GNSS.getMinute();
   uint8_t sec = GNSS.getSecond();
   uint16_t millisecs = GNSS.getMillisecond();
-  double gpsLongitude = ((GNSS.getLongitude()) * 1E-7);
-  double gpsLatitude = ((GNSS.getLatitude()) * 1E-7);
+  float gpsLongitude = ((GNSS.getLongitude()) * 1E-7);
+  float gpsLatitude = ((GNSS.getLatitude()) * 1E-7);
   float gpsAltitude = ((GNSS.getAltitudeMSL()) * 1E-3);
   float gpsGroundSpeed = ((GNSS.getGroundSpeed()) * 1E-3); // Ground Speed (2-D): m/s
   float gpsHeading = ((GNSS.getHeading()) * 1E-5);         // Heading of motion (2-D): deg
@@ -293,7 +291,7 @@ void logGPSData()
   if (logCount == 10)
   {
     loraBufferAvalible = false;
-    sprintf(loraBuffer, "%d:%d:%d.%d,%.6f,%.6f,%d,%.1f,%.1f,%.1f,%.1f,%.1f", hour, min, sec, gpsLatitude, gpsLongitude, altimeterAltitude, gpsGroundSpeed, gpsHeading, externalTemp, externalHumidity, lipoStateOfCharge);
+    sprintf(loraBuffer, "%d:%d:%d.%d,%.6f,%.6f,%.0f,%.1f,%.1f,%.1f,%.1f,%.1f", hour, min, sec, gpsLatitude, gpsLongitude, altimeterAltitude, gpsGroundSpeed, gpsHeading, externalTemp, externalHumidity, lipoStateOfCharge);
     loraBufferAvalible = true;
     logCount = 0;
   }
@@ -321,8 +319,17 @@ void blinkLED()
 
 void slowPowerDown()
 {
-  dataFile.close();
   noInterrupts();
+  if (mode == 1)
+  {
+    digitalWrite(LED_GREEN, HIGH);
+  }
+  else
+  {
+    digitalWrite(LED_RED, HIGH);
+  }
+  digitalWrite(LED_GREEN, LOW);
+  digitalWrite(LED_BLUE, LOW);
   pinMode(powerButtonPin, OUTPUT);
   digitalWrite(powerButtonPin, LOW);
   while (1)
@@ -345,16 +352,46 @@ void handleLongPress()
   {
     slowPowerDown();
   }
+  // Get the current time
+  unsigned long currentMillis = millis();
+
+  // Check if it's time to change the state of the LED
+  if (currentMillis - previousMillis > (ledState ? 500 : 500))
+  {
+    // Toggle the state of the LED
+    ledState = !ledState;
+    if (mode == 1)
+    {
+      digitalWrite(LED_RED, ledState);
+      digitalWrite(LED_BLUE, LOW);
+    }
+    else
+    {
+      digitalWrite(LED_RED, ledState);
+      digitalWrite(LED_BLUE, LOW);
+    }
+
+    // Update the previous time to be the current time
+    previousMillis = currentMillis;
+  }
 }
 
 // This function will be called when the button is released after a long press
 void handleLongPressStop()
 {
+  if (mode == 1)
+  {
+    digitalWrite(LED_GREEN, LOW);
+  }
+  else
+  {
+    // Turn off the LED
+    digitalWrite(LED_BLUE, LOW);
+  }
   // Reset the long press start time
   longPressStartTime = 0;
   powerButtonPressed = false;
 }
-
 boolean runEvery(unsigned long interval)
 {
   static unsigned long previousMillis = 0;
@@ -424,7 +461,7 @@ void setup()
     return;
   }
 
-  SHT30.setAccuracy(SHTSensor::SHT_ACCURACY_HIGH); // only supported by SHT3x
+  SHT30.setAccuracy(SHTSensor::SHT_ACCURACY_MEDIUM); // only supported by SHT3x
 
   Serial1.begin(38400);
   if (!GNSS.begin(Serial1))
@@ -444,20 +481,19 @@ void setup()
   }
 
   timePulseParameters.tpIdx = 0; // Select the TIMEPULSE pin
+  // timePulseParameters.tpIdx = 1; // Or we could select the TIMEPULSE2 pin instead, if the module has one
 
   // We can configure the time pulse pin to produce a defined frequency or period
   // Here is how to set the frequency:
 
   // When the module is _locked_ to GNSS time, make it generate 10Hz
-  timePulseParameters.freqPeriod = 1;            // Set the frequency/period to 1Hz
-  timePulseParameters.pulseLenRatio = 50000;     // Set the period to 50,000 us
-  timePulseParameters.freqPeriodLock = 10;       // Set the frequency/period to 10Hz
-  timePulseParameters.pulseLenRatioLock = 50000; // Set the period to 50,000 us
+  timePulseParameters.freqPeriodLock = 10;            // Set the frequency/period to 10Hz
+  timePulseParameters.pulseLenRatioLock = 0x80000000; // Set the pulse ratio to 1/2 * 2^32 to produce 50:50 mark:space
 
   timePulseParameters.flags.bits.active = 1;         // Make sure the active flag is set to enable the time pulse. (Set to 0 to disable.)
   timePulseParameters.flags.bits.lockedOtherSet = 1; // Tell the module to use freqPeriod while locking and freqPeriodLock when locked to GNSS time
   timePulseParameters.flags.bits.isFreq = 1;         // Tell the module that we want to set the frequency (not the period)
-  timePulseParameters.flags.bits.isLength = 1;       // Tell the module that pulseLenRatio is a length (in us) - not a duty cycle
+  timePulseParameters.flags.bits.isLength = 0;       // Tell the module that pulseLenRatio is a ratio / duty cycle (* 2^-32) - not a length (in us)
   timePulseParameters.flags.bits.polarity = 1;       // Tell the module that we want the rising edge at the top of second. (Set to 0 for falling edge.)
 
   // Now set the time pulse parameters
@@ -521,32 +557,29 @@ void loop1()
       {
         return;
       }
-      // Serial.print("Sending packet non-blocking: ");
-      // Serial.println(loraBuffer);
-      //  send in async / non-blocking mode
+      Serial.print("Sending packet non-blocking: ");
+      Serial.println(loraBuffer);
+      // send in async / non-blocking mode
       LoRa.beginPacket();
       LoRa.write((const uint8_t *)loraBuffer, strlen(loraBuffer));
       LoRa.endPacket(true); // true = async / non-blocking mode
     }
-    int currentPPSState = digitalRead(ppsPin); // read the current state of the pin
-    if (currentPPSState != previousPPSState)
-    { // if the state has changed
-      if (currentPPSState == HIGH)
-      {
-        if ((ppsLedCount++) == 10)
-        {
-          digitalWrite(LED_BLUE, HIGH);
-          ppsLedCount = 0;
-        }
-        else
-        {
-          digitalWrite(LED_BLUE, LOW);
-        }
-      }
+    int ppsStatus = digitalRead(ppsPin)
+    if (ppsStatus == HIGH) && (ppsLedCount == 10))
+    {
+      digitalWrite(LED_BLUE, HIGH);
+      ppsLedCount = 0;
     }
-    previousPPSState = currentPPSState; // update the previous state with the current state
+    else if (digitalRead(ppsPin) == HIGH)
+    {
+      ppsLedCount++;
+    }
+    else
+    {
+      digitalWrite(LED_BLUE, LOW);
+    }
+    powerButton.tick();
   }
-  powerButton.tick();
   bootSelectButton.tick();
 }
 
@@ -554,6 +587,7 @@ void loop()
 {
   switch (mode)
   {
+  // charge mode
   case 0:
     if (!powerButtonPressed)
     {
@@ -571,8 +605,7 @@ void loop()
 
   // data log mode
   case 1:
-
-    if ((digitalRead(ppsPin) == HIGH))
+    if (digitalRead(ppsPin) == HIGH)
     {
       logGPSData();
     }
