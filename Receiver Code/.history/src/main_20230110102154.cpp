@@ -59,10 +59,10 @@ const int MAX_MESSAGE_LENGTH = 100;
 char message[MAX_MESSAGE_LENGTH];
 int logCount = 0;               // counter to keep track of number of logs made
 const int LOGS_BEFORE_SEND = 5; // number of logs to make before sending lora data ie send lora data every five seconds
-bool loraBufferAvalible;
 
 // Ublox Neo M9N module
 SFE_UBLOX_GNSS GNSS;
+long lastTime = 0; // Simple local timer. Limits amount if I2C traffic to u-blox module.
 const int ppsPin = 17;
 
 // USB Mass Storage object
@@ -71,10 +71,9 @@ Adafruit_USBD_MSC usb_msc;
 #define SPI_CLOCK SD_SCK_MHZ(20)
 #define SD_CONFIG SdSpiConfig(PIN_SPI1_SS, SHARED_SPI, SPI_CLOCK, &SPI1)
 SdFat sd;
-SdFile dataFile;
 // string to buffer output
 bool fileCreated = false;
-char loraBuffer[100];
+char loraBuffer[250];
 
 // Create a new file with a number one higher than the highest numbered file
 char newFileName[13];
@@ -84,9 +83,9 @@ float batterySOC = 0.0;
 unsigned long previousLogMillis = 0;
 unsigned long currentLogMillis = 0;
 const int DATA_LOG_INTERVAL = 1000; // interval in milliseconds between data logs
-unsigned long lastTime = 0;         // Simple local timer. Limits amount if I2C traffic to u-blox module.
-unsigned long startTime = 0;        // Used to calc the actual update rate.
-unsigned long updateCount = 0;      // Used to calc the actual update rate.
+unsigned long lastTime = 0; //Simple local timer. Limits amount if I2C traffic to u-blox module.
+unsigned long startTime = 0; //Used to calc the actual update rate.
+unsigned long updateCount = 0; //Used to calc the actual update rate.
 
 void iluminateErrorLed()
 {
@@ -222,13 +221,14 @@ bool createDataLoggingFile()
   sprintf(newFileName, "%d.csv", highestFileNumber + 1);
   if (!sd.exists(newFileName))
   {
-    if (dataFile.open(newFileName, O_CREAT | O_WRITE))
+    SdFile newFile;
+    if (newFile.open(newFileName, O_CREAT | O_WRITE))
     {
       Serial.print("Created new file: ");
       Serial.println(newFileName);
-      dataFile.print("Time UTC (H:M:S),Time Valid (0 = Invalid 1 = Valid),Longitude (DD°),Latitude (DD°),GPS Altitude (m),GPS Ground Speed (m/s),GPS Track Over Ground (deg°),Satellites In View, Fix Type (0 = No Fix 3 = 3D 4 = GNSS 5 = Time Fix), Primary Temperature (C°), Humidity (RH%), Altimeter Temperature (C°), Altitude Relative To Sea Level (1013.25 mBar) (m), Battery Percentage, Battery Discharge Rate (%/h), Time Since Power On (ms)");
-      dataFile.println();
-      dataFile.sync();
+      newFile.print("Time UTC (H:M:S),Time Valid (0 = Invalid 1 = Valid),Longitude (DD°),Latitude (DD°),GPS Altitude (m),GPS Ground Speed (m/s),GPS Track Over Ground (deg°),Satellites In View, Fix Type (0 = No Fix 3 = 3D 4 = GNSS 5 = Time Fix), Primary Temperature (C°), Humidity (RH%), Altimeter Temperature (C°), Altitude Relative To Sea Level (1013.25 mBar) (m), Battery Percentage, Battery Discharge Rate (%/h), Time Since Power On (ms)");
+      newFile.println();
+      newFile.close();
       return true;
     }
     else
@@ -251,7 +251,7 @@ float getAltitude()
   return altitude;
 }
 
-void logGPSData(UBX_NAV_PVT_data_t *ubxDataStruct)
+void logGPSData()
 {
   // SdFile dataFile;
   // if (dataFile.open(newFileName, FILE_WRITE))
@@ -260,52 +260,53 @@ void logGPSData(UBX_NAV_PVT_data_t *ubxDataStruct)
   //   dataFile.println(dataBuffer);
   //   dataFile.close();
   //   digitalWrite(LED_GREEN, HIGH);
+  //   logCount++;
+  //   if (logCount == 5)
+  //   {
+  //     sprintf(loraBuffer, "%d:%d:%d,%.4f,%.4f,%.0f,%.1f,%.1f,%.1f,%.1f,%.1f", hour, min, sec, gpsLatitude, gpsLongitude, altimeterAltitude, gpsGroundSpeed, gpsHeading, externalTemp, externalHumidity, lipoStateOfCharge);
+  //     LoRa.beginPacket();
+  //     LoRa.write((const uint8_t *)loraBuffer, strlen(loraBuffer));
+  //     LoRa.endPacket(true); // true = async / non-blocking mode
+  //     Serial.println("sent lora");
+  //     Serial.println(strlen(loraBuffer));
+  //     Serial.println(loraBuffer);
+  //     logCount = 0;
+  //   }
+  // }
+  // else
+  // {
+  //   iluminateErrorLed();
+  //   Serial.println("error");
+  //   while (1)
+  //   {
+  //   }
+  // }
+  int currentTime = millis();
+  char dataBuffer[250];
+  // add a new line to the dataBuffer
+  // int hour = GNSS.getHour();
+  // int min = GNSS.getMinute();
+  // int sec = GNSS.getSecond();
+  // int timeValid = GNSS.getTimeValid();
+  long gpsLongitude = (GNSS.getLongitude());
+  long gpsLatitude = (GNSS.getLatitude());
+  // float gpsAltitude = (GNSS.getAltitude());
+  // float gpsGroundSpeed = (GNSS.getGroundSpeed());
+  // float gpsHeading = (GNSS.getHeading());
+  // int satelitesInView = GNSS.getSIV();
+  // int fixType = GNSS.getFixType();
+  // SHT30.readSample();
+  // float externalTemp = SHT30.getTemperature();
+  // float externalHumidity = SHT30.getHumidity();
+  // float altimeterTemp = altimeter.getTemperature();
+  // float altimeterAltitude = getAltitude();
+  // float lipoStateOfCharge = lipo.getSOC();
+  // float lipoDischargeRate = lipo.getChangeRate();
+  unsigned long timestamp = millis();
+
+  // sprintf(dataBuffer, "%d:%d:%d,%d,%.4f,%.4f,%.2f,%.2f,%.2f,%d,%d,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%d", hour, min, sec, timeValid, gpsLatitude, gpsLongitude, gpsAltitude, gpsGroundSpeed, gpsHeading, satelitesInView, fixType, externalTemp, externalHumidity, altimeterTemp, altimeterAltitude, lipoStateOfCharge, lipoDischargeRate, timestamp);
   int time2 = millis();
-  char dataBuffer[100];
-  uint8_t hour = ubxDataStruct->hour;
-  uint8_t min = ubxDataStruct->min;
-  uint8_t sec = ubxDataStruct->sec;
-  unsigned long millisecs = ubxDataStruct->iTOW % 1000;
-  float gpsLongitude = ((ubxDataStruct->lat) * 1E-7);
-  float gpsLatitude = ((ubxDataStruct->lon) * 1E-7);
-  float gpsAltitude = ((ubxDataStruct->hMSL) * 1E-3);
-  float gpsGroundSpeed = ((ubxDataStruct->gSpeed) * 1E-3); // Ground Speed (2-D): m/s
-  float gpsHeading = ((ubxDataStruct->headMot) * 1E-5);    // Heading of motion (2-D): deg
-  uint8_t satelitesInView = ubxDataStruct->numSV;          // Number of satellites used in Nav Solution
-  uint8_t fixType = ubxDataStruct->fixType;
-  bool timeValid = GNSS.getTimeValid();
-  float externalTemp = SHT30.getTemperature();
-  float externalHumidity = SHT30.getHumidity();
-  float altimeterTemp = altimeter.getTemperature();
-  float altimeterAltitude = getAltitude();
-  float lipoStateOfCharge = lipo.getSOC();
-  float lipoDischargeRate = lipo.getChangeRate();
-
-  sprintf(dataBuffer, "%d:%d:%d.%d,%d,%.4f,%.4f,%.2f,%.2f,%.2f,%d,%d,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f", hour, min, sec, millisecs, timeValid, gpsLatitude, gpsLongitude, gpsAltitude, gpsGroundSpeed, gpsHeading, satelitesInView, fixType, externalTemp, externalHumidity, altimeterTemp, altimeterAltitude, lipoStateOfCharge, lipoDischargeRate);
-  noInterrupts();
-  int bytesWritten = dataFile.println(dataBuffer);
-  dataFile.sync();
-  interrupts();
-  int time3 = millis();
-  lastTime = time2;
-  Serial.println(time3 - time2);
-  logCount++;
-  if (logCount == 10)
-  {
-    loraBufferAvalible = false;
-    sprintf(loraBuffer, "%d:%d:%d,%.4f,%.4f,%.0f,%.1f,%.1f,%.1f,%.1f,%.1f", hour, min, sec, gpsLatitude, gpsLongitude, altimeterAltitude, gpsGroundSpeed, gpsHeading, externalTemp, externalHumidity, lipoStateOfCharge);
-    loraBufferAvalible = true;
-    logCount = 0;
-  }
-
-  else
-  {
-    iluminateErrorLed();
-    Serial.println("error");
-    while (1)
-    {
-    }
-  }
+  Serial.println(time2 - currentTime);
 }
 void buttonDoubleClick()
 {
@@ -383,23 +384,6 @@ void handleLongPressStop()
   powerButtonPressed = false;
 }
 
-void onTxDone()
-{
-  Serial.println("done");
-  Serial.println(millis());
-}
-boolean runEvery(unsigned long interval)
-{
-  static unsigned long previousMillis = 0;
-  unsigned long currentMillis = millis();
-  if (currentMillis - previousMillis >= interval)
-  {
-    previousMillis = currentMillis;
-    return true;
-  }
-  return false;
-}
-
 //====================================================================================
 //                                    Setup
 //====================================================================================
@@ -437,7 +421,8 @@ void setup()
       Serial.println("MS5637 sensor did not respond. Please check wiring.");
     }
   }
-  altimeter.setResolution(ms5637_resolution_osr_2048); // 5ms per reading, 0.028mbar resolution
+  // Set the resolution of the sensor to the highest level of resolution: 0.016 mbar
+  altimeter.setResolution(ms5637_resolution_osr_8192);
   // MAX17048 Battery Fuel Gauge start
   if (!lipo.begin(Wire1)) // Connect to the MAX17043 using non-standard wire port
   {
@@ -459,22 +444,20 @@ void setup()
     }
   }
   SHT30.setAccuracy(SHTSensor::SHT_ACCURACY_MEDIUM); // only supported by SHT3x
-  Serial.begin(9600);
-  Serial1.begin(38400);
 
-  Serial1.begin(38400);
-  if (!GNSS.begin(Serial1))
+  // GPS setup
+  while (!GNSS.begin(Wire1)) // Connect to the u-blox module using Wire port
   {
-    Serial.println("gps not started");
-    return;
+    Serial.println(F("u-blox GNSS not detected at default I2C address. Please check wiring. Freezing."));
   }
-  Serial.println("GNSS serial connected");
+  GNSS.setI2COutput(COM_TYPE_UBX); // Set the I2C port to output UBX only (turn off NMEA noise)
+  GNSS.setNavigationFrequency(5);  // Set output to 5 times a second
 
-  GNSS.setUART1Output(COM_TYPE_UBX);       // Set the UART port to output UBX only
-  GNSS.setI2COutput(COM_TYPE_UBX);         // Set the I2C port to output UBX only (turn off NMEA noise)
-  GNSS.setNavigationFrequency(10);         // Set output to 5 times a second
-  GNSS.saveConfiguration();                // Save the current settings to flash and BBR
-  GNSS.setAutoPVTcallbackPtr(&logGPSData); // Enable automatic NAV PVT messages with callback to printPVTdata
+  uint8_t rate = GNSS.getNavigationFrequency(); // Get the update rate of this module
+  Serial.print("Current update rate: ");
+  Serial.println(rate);
+  Serial.println("intialization done");
+  int startTime = millis();
   digitalWrite(LED_BLUE, LOW);
   digitalWrite(LED_RED, LOW);
 }
@@ -490,7 +473,6 @@ void setup1()
       Serial.println("LoRa init failed. Check your connections.");
     }
   }
-  LoRa.onTxDone(onTxDone);
   if (!sd.begin(SD_CONFIG))
   {
     Serial.println("initialization failed. Things to check:");
@@ -512,7 +494,6 @@ void setup1()
       Serial.println("datalogging file failed");
     }
   }
-  Serial.println(newFileName);
   bootSelectButton.attachDoubleClick(buttonDoubleClick);
   powerButton.attachDuringLongPress(handleLongPress);
   powerButton.attachLongPressStop(handleLongPressStop);
@@ -534,46 +515,71 @@ void loop1()
   }
   bootSelectButton.tick();
   powerButton.tick();
-  if (runEvery(2000) && loraBufferAvalible)
-  { // repeat every 2000 millis
-
-    Serial.print("Sending packet non-blocking: ");
-    Serial.println(loraBuffer);
-    // send in async / non-blocking mode
-    LoRa.beginPacket();
-    LoRa.write((const uint8_t *)loraBuffer, strlen(loraBuffer));
-    LoRa.endPacket(true); // true = async / non-blocking mode
-  }
 }
 
 void loop()
 {
-  switch (mode)
-  {
-  // charge mode
-  case 0:
-    if (!powerButtonPressed)
-    {
-      batterySOC = lipo.getSOC();
-      if (batterySOC < 100)
-      {
-        blinkLED();
-      }
-      else
-      {
-        digitalWrite(LED_BLUE, HIGH);
-      }
-    }
-    break;
+  // switch (mode)
+  // {
+  // // charge mode
+  // case 0:
+  //   if (!powerButtonPressed)
+  //   {
+  //     batterySOC = lipo.getSOC();
+  //     if (batterySOC < 100)
+  //     {
+  //       blinkLED();
+  //     }
+  //     else
+  //     {
+  //       digitalWrite(LED_BLUE, HIGH);
+  //     }
+  //   }
+  //   break;
 
-  // data log mode
-  case 1:
-    GNSS.checkUblox();     // Check for the arrival of new data and process it.
-    GNSS.checkCallbacks(); // Check if any callbacks are waiting to be processed.
-    break;
-    // if the mode value is not covered by the case statements, do something else:
-  default:
-    mode = 0;
-    break;
+  // // data log mode
+  // case 1:
+  //   // // Get the current time
+  //   // currentLogMillis = millis();
+
+  //   // // Check if it's time to run the function
+  //   // if (currentLogMillis - previousLogMillis > DATA_LOG_INTERVAL)
+  //   // {
+  //   //   // Run the function
+  //   //   logGPSData();
+  //   //   // Update the previous time to be the current time
+  //   //   previousLogMillis = currentLogMillis;
+  //   // }
+  //   logGPSData();
+  //   break;
+  //   // if the mode value is not covered by the case statements, do something else:
+  // default:
+  //   // insert your code here to handle other mode values
+  //   break;
+  // }
+  //Query module every 25 ms. Doing it more often will just cause I2C traffic.
+  //The module only responds when a new position is available. This is defined
+  //by the update freq.
+  if (millis() - lastTime > 25)
+  {
+    lastTime = millis(); //Update the timer
+    
+    long latitude = GNSS.getLatitude();
+    Serial.print(F("Lat: "));
+    Serial.print(latitude);
+
+    long longitude = GNSS.getLongitude();
+    Serial.print(F(" Long: "));
+    Serial.print(longitude);
+
+    updateCount++;
+
+    //Calculate the actual update rate based on the sketch start time and the 
+    //number of updates we've received.
+    Serial.print(F(" Rate: "));
+    Serial.print( updateCount / ((millis() - startTime) / 1000.0), 2);
+    Serial.print(F("Hz"));
+
+    Serial.println();
   }
 }
