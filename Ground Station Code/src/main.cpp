@@ -16,6 +16,8 @@
 #include "Direction Arrow Icon.h"
 #include "Data Receive Grey Icon.h"
 #include "Data Transfer Grey Icon.h"
+#include "GPS Fix Icon.h"
+#include "GPS Fix Icon Grey.h"
 // Splash Screen
 #include "splash screen.h"
 #include "Data Transfer Screen.h"
@@ -64,8 +66,10 @@ float vehicleHeading = 0.0;
 int count = 0;
 int tick = 0;
 int pageNum = 0;
-float testLat = 00.0000;
-float testLong = 000.0000;
+float testLat = 00.000000;
+float passLat = 00.000000;
+float testLong = 00.000000;
+float passLong = 00.000000;
 bool testSend = false;
 bool testReceive = true;
 int testHeading = 0;
@@ -76,6 +80,7 @@ int testGroundSpeed = 0;
 int lastAltitude = 0;
 float lastLat = 0.0;
 float lastLong = 0.0;
+int testGpsFixType = 0;
 bool lastStatus = false;
 bool currentlyConnected = false;
 unsigned long lastRssiCheck = 0;
@@ -133,13 +138,13 @@ void createDirectionArrow()
 void createMessages()
 {
     messages.setColorDepth(8);
-    messages.createSprite(100, 20);
+    messages.createSprite(90, 20);
     messages.fillSprite(TFT_BLACK);
 }
 void createStatusBar()
 {
     statusBar.setColorDepth(8);
-    statusBar.createSprite(56, 20, TFT_TRANSPARENT);
+    statusBar.createSprite(66, 20, TFT_TRANSPARENT);
     statusBar.fillSprite(TFT_BLACK);
 }
 void createDataPanel()
@@ -166,7 +171,7 @@ void drawAltimeter(int thousandthsAngle, int hundredthsAngle)
     page.pushSprite(0, 21, TFT_TRANSPARENT);
 }
 
-void drawStatusBar(float percentage, int rssi, bool transmitting, bool receiving, bool isConnected)
+void drawStatusBar(float percentage, int rssi, bool transmitting, bool receiving, bool isConnected, int fixType)
 {
     /**
      * @brief Draws the signal strength, battery and transmitting/receiving indicaors
@@ -178,8 +183,8 @@ void drawStatusBar(float percentage, int rssi, bool transmitting, bool receiving
      */
 
     // draw RSSI
-    const int sigX = 14;
-    const int sigY = 4;
+    const int sigX = 0;
+    const int sigY = 5;
     int strength = map(rssi, -120, -75, 0, 4);
     unsigned short barZero = TFT_DARKGREY;
     unsigned short barOne = TFT_DARKGREY;
@@ -215,7 +220,7 @@ void drawStatusBar(float percentage, int rssi, bool transmitting, bool receiving
     statusBar.fillSmoothRoundRect(sigX, (sigY + 6), 2, 4, 1, barZero);
 
     // draw data transfer symbol
-    const int datX = 0;
+    const int datX = 16;
     const int datY = 5;
     statusBar.pushImage(datX, datY, 5, 10, dataTransmitGrey);
     statusBar.pushImage((datX + 5), datY, 5, 10, dataReceiveGrey);
@@ -229,8 +234,8 @@ void drawStatusBar(float percentage, int rssi, bool transmitting, bool receiving
     }
 
     // Draw battery icon
-    const int batX = 32; // battery icon x, y coordinate (top left)
-    const int batY = 4;
+    const int batX = 42; // battery icon x, y coordinate (top left)
+    const int batY = 5;
     unsigned short batColour = tft.color565(53, 191, 25);
     int recWidth = map(round(percentage), 0, 100, 1, 14);
 
@@ -245,8 +250,17 @@ void drawStatusBar(float percentage, int rssi, bool transmitting, bool receiving
     statusBar.fillSmoothRoundRect((batX + 2), (batY + 2), recWidth, 6, 1, batColour);
     statusBar.drawRoundRect(batX, batY, 18, 10, 1, TFT_WHITE);
     statusBar.fillSmoothRoundRect((batX + 18), (batY + 2), 2, 6, 2, TFT_WHITE);
+    // draw gps fix symbol
+    if ((fixType == 2) || (fixType == 3))
+    {
+        statusBar.pushImage(29, 5, 10, 10, gpsFix);
+    }
+    else
+    {
+        statusBar.pushImage(29, 5, 10, 10, gpsNoFix);
+    }
     // Draw status bar on screen
-    statusBar.pushSprite(104, 0, TFT_TRANSPARENT);
+    statusBar.pushSprite(94, 0, TFT_TRANSPARENT);
 }
 
 void drawDataPanel(float heading, float temp, float humidity, float speed)
@@ -365,7 +379,7 @@ void drawMessages(bool connected)
 //                                    Pages
 //====================================================================================
 
-void drawLayout(int batteryPercentage, int rssi, bool transmitting, bool receiving, int heading, float velocity, int temp, int humidity, bool isConnected)
+void drawLayout(int batteryPercentage, int rssi, bool transmitting, bool receiving, int heading, float velocity, int temp, int humidity, bool isConnected, int gnssFix)
 {
     /**
      * @brief Draws the base UI --> status bar, data panel and message bar
@@ -378,7 +392,7 @@ void drawLayout(int batteryPercentage, int rssi, bool transmitting, bool receivi
      * @param temp SHT30 external sensor temp in degrees
      * @param humidity SHT30 humidity in RH
      */
-    drawStatusBar(batteryPercentage, rssi, transmitting, receiving, isConnected);
+    drawStatusBar(batteryPercentage, rssi, transmitting, receiving, isConnected, gnssFix);
     drawDataPanel(heading, temp, humidity, velocity);
     drawMessages(isConnected);
     tft.drawLine(0, 20, 108, 20, TFT_WHITE);
@@ -572,7 +586,7 @@ bool createDataLoggingFile()
         {
             Serial.print("Created new file: ");
             Serial.println(newFileName);
-            dataFile.print("Time UTC (H:M:S),Latitude (DD°),Longitude (DD°), Altitude (m), GPS Ground Speed (m/s), GPS Track Over Ground (deg°), Primary Temperature (C°), Humidity (RH%), Battery Percentage (%)");
+            dataFile.print("Time UTC (H:M:S), Fix Type (0 = No 2 = 2D Fix 3 = 3D 4 = GNSS 5 = Time Fix), Latitude (DD°),Longitude (DD°), Altitude (m), GPS Ground Speed (m/s), GPS Track Over Ground (deg°), Primary Temperature (C°), Humidity (RH%), Battery Percentage (%)");
             dataFile.println();
             dataFile.sync();
             return true;
@@ -715,22 +729,24 @@ void loop()
             return;
         }
         interrupts();
-        Serial.println(message);
-        double latitude, longitude;
-        float groundSpeed, trackOverGround, temp, humidity, bat, altitute;
-        int hour, min, sec, millisec;
+        // Serial.println(message);
+        float groundSpeed, trackOverGround, temp, humidity, bat, latitude, longitude, altitude;
+        ;
+        int hour, min, sec, millisec, gpsFixVal;
 
-        sscanf(message, "%d:%d:%d.%d,%.6f,%.6f,%.0f,%.1f,%.1f,%.1f,%.1f,%.1f", &hour, &min, &sec, &millisec, &latitude, &longitude, &altitute, &groundSpeed, &trackOverGround, &temp, &humidity, &bat);
+        sscanf(message, "%d:%d:%d.%d,%d,%f,%f,%f,%f,%f,%f,%f,%f", &hour, &min, &sec, &millisec, &gpsFixVal, &latitude, &longitude, &altitude, &groundSpeed, &trackOverGround, &temp, &humidity, &bat);
 
         testLat = latitude;
         testLong = longitude;
-        testAltitude = altitute;
+        testAltitude = int((altitude * 3.281)); // convert to feet
         testTemp = temp;
         testHumdity = humidity;
         vehicleHeading = trackOverGround;
         batteryPercentage = bat;
-        testGroundSpeed = (groundSpeed * 1.943844);
+        testGroundSpeed = (groundSpeed * 1.943844); // convert to knots
+        testGpsFixType = gpsFixVal;
         testReceive = true;
+        Serial.println(message);
     }
     if (millis() - lastRssiCheck > TIMEOUT)
     {
@@ -744,7 +760,7 @@ void loop()
     // update the state of the down button:
     downButton.tick();
     tft.startWrite();
-    drawLayout(batteryPercentage, rssi, testSend, testReceive, vehicleHeading, testGroundSpeed, testTemp, testHumdity, currentlyConnected);
+    drawLayout(batteryPercentage, rssi, testSend, testReceive, vehicleHeading, testGroundSpeed, testTemp, testHumdity, currentlyConnected, testGpsFixType);
     // use a switch statement to check the value of the mode variable:
     switch (mode)
     {
@@ -755,7 +771,12 @@ void loop()
 
     // if the mode value is 2, do something else:
     case 1:
-        drawGpsPage(testLat, testLong);
+        if ((testGpsFixType == 2) || (testGpsFixType == 3))
+        {
+            passLat = testLat;
+            passLong = testLong;
+        }
+        drawGpsPage(passLat, passLong);
         break;
 
     // if the mode value is not covered by the case statements, do something else:
