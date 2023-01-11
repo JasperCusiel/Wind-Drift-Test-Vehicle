@@ -18,6 +18,7 @@
 #include "Data Transfer Grey Icon.h"
 // Splash Screen
 #include "splash screen.h"
+#include "Data Transfer Screen.h"
 // Include Font Files
 #include "Roboto mono 8pt.h"
 #include "Roboto mono 10pt.h"
@@ -36,6 +37,8 @@ Adafruit_USBD_MSC usb_msc;
 #define SPI_CLOCK SD_SCK_MHZ(20)
 #define SD_CONFIG SdSpiConfig(chipSelect, SHARED_SPI, SPI_CLOCK, &SPI1)
 SdFat sd;
+SdFile dataFile;
+bool fileCreated = false;
 
 // LoRa Setup
 const int csPin = 1;
@@ -61,15 +64,22 @@ float vehicleHeading = 0.0;
 int count = 0;
 int tick = 0;
 int pageNum = 0;
-double testLat = 00.000000;
-double testLong = 00.000000;
+float testLat = 00.0000;
+float testLong = 000.0000;
 bool testSend = false;
 bool testReceive = true;
 int testHeading = 0;
-float testAltitude = 0;
+int testAltitude = 0;
 int testTemp = 0;
 int testHumdity = 0;
 int testGroundSpeed = 0;
+int lastAltitude = 0;
+float lastLat = 0.0;
+float lastLong = 0.0;
+bool lastStatus = false;
+bool currentlyConnected = false;
+unsigned long lastRssiCheck = 0;
+const int TIMEOUT = 10000; // 10 sec
 
 // Create a new file with a number one higher than the highest numbered file
 char newFileName[13];
@@ -123,9 +133,8 @@ void createDirectionArrow()
 void createMessages()
 {
     messages.setColorDepth(8);
-    messages.createSprite(100, 37);
+    messages.createSprite(100, 20);
     messages.fillSprite(TFT_BLACK);
-    messages.setScrollRect(0, 0, 100, 37, TFT_BLACK);
 }
 void createStatusBar()
 {
@@ -157,7 +166,7 @@ void drawAltimeter(int thousandthsAngle, int hundredthsAngle)
     page.pushSprite(0, 21, TFT_TRANSPARENT);
 }
 
-void drawStatusBar(float percentage, int rssi, bool transmitting, bool receiving)
+void drawStatusBar(float percentage, int rssi, bool transmitting, bool receiving, bool isConnected)
 {
     /**
      * @brief Draws the signal strength, battery and transmitting/receiving indicaors
@@ -176,7 +185,6 @@ void drawStatusBar(float percentage, int rssi, bool transmitting, bool receiving
     unsigned short barOne = TFT_DARKGREY;
     unsigned short barTwo = TFT_DARKGREY;
     unsigned short barThree = TFT_DARKGREY;
-
     if (strength >= 3)
     {
         barThree = TFT_WHITE;
@@ -192,6 +200,13 @@ void drawStatusBar(float percentage, int rssi, bool transmitting, bool receiving
     if (strength >= 0)
     {
         barZero = TFT_WHITE;
+    }
+    if (!isConnected)
+    {
+        barZero = TFT_DARKGREY;
+        barOne = TFT_DARKGREY;
+        barTwo = TFT_DARKGREY;
+        barThree = TFT_DARKGREY;
     }
     statusBar.fillSprite(TFT_BLACK);
     statusBar.fillSmoothRoundRect((sigX + 12), sigY, 2, 10, 1, barThree);
@@ -328,36 +343,29 @@ void drawDataPanel(float heading, float temp, float humidity, float speed)
     dataPanel.pushSprite(108, 20);
 }
 
-void drawMessages()
+void drawMessages(bool connected)
 { // max message length = 17 characters
-    messages.scroll(0, 1);
+    messages.fillSprite(TFT_BLACK);
     messages.loadFont(FONT_10PT);
-    count++;
-    if (count == 14)
+    if (connected)
     {
-        count = 0;
-        if (tick == 1)
-        {
-            tick = 0;
-            messages.setTextColor(TFT_GREEN);
-            messages.drawString("Connected", 0, 0, 1);
-        }
-        else
-        {
-            tick = 1;
-            messages.setTextColor(TFT_RED);
-            messages.drawString("Disconnected", 0, 0, 1);
-        }
+        messages.setTextColor(TFT_GREEN);
+        messages.drawString("LoRa Connected", 4, 6, 1);
     }
-    messages.pushSprite(0, -20);
+    else
+    {
+        messages.setTextColor(TFT_RED);
+        messages.drawString("Disconnected", 4, 6, 1);
+    }
     messages.unloadFont();
+    messages.pushSprite(0, 0);
 }
 
 //====================================================================================
 //                                    Pages
 //====================================================================================
 
-void drawLayout(int batteryPercentage, int rssi, bool transmitting, bool receiving, int heading, float velocity, int temp, int humidity)
+void drawLayout(int batteryPercentage, int rssi, bool transmitting, bool receiving, int heading, float velocity, int temp, int humidity, bool isConnected)
 {
     /**
      * @brief Draws the base UI --> status bar, data panel and message bar
@@ -370,9 +378,9 @@ void drawLayout(int batteryPercentage, int rssi, bool transmitting, bool receivi
      * @param temp SHT30 external sensor temp in degrees
      * @param humidity SHT30 humidity in RH
      */
-    drawStatusBar(batteryPercentage, rssi, transmitting, receiving);
+    drawStatusBar(batteryPercentage, rssi, transmitting, receiving, isConnected);
     drawDataPanel(heading, temp, humidity, velocity);
-    drawMessages();
+    drawMessages(isConnected);
     tft.drawLine(0, 20, 108, 20, TFT_WHITE);
 }
 
@@ -390,9 +398,9 @@ void drawAltimeterPage(int alt)
     drawAltimeter(angleMapThousandths, angleMapHundredths);
 }
 
-void drawGpsPage(double latitude, double longitude)
+void drawGpsPage(float latitude, float longitude)
 {
-    double latDegrees = latitude;
+    int latDegrees = latitude;
     int latMin = (latitude - latDegrees) * 60;
     float latSec = (((latitude - latDegrees) * 60) - latMin) * 60;
     char latitudeDMS[16];
@@ -400,7 +408,7 @@ void drawGpsPage(double latitude, double longitude)
     dtostrf(abs(latSec), 4, 1, latSec1DP);
     sprintf(latitudeDMS, "%d° %d' %s\"", abs(latDegrees), abs(latMin), latSec1DP);
 
-    double longDegrees = longitude;
+    int longDegrees = longitude;
     int longMin = (longitude - longDegrees) * 60;
     float longSec = (((longitude - longDegrees) * 60) - longMin) * 60;
     char longitudeDMS[16];
@@ -497,7 +505,7 @@ void start_usb_mass_storage()
     tft.begin();
     tft.setRotation(1);
     tft.setSwapBytes(true);
-    tft.pushImage(0, 0, 160, 128, splashImg);
+    tft.pushImage(0, 0, 160, 128, dataTransferScreen);
     tft.endWrite();
     Serial.println("Adafruit TinyUSB Mass Storage SD Card example");
 
@@ -536,7 +544,7 @@ void start_usb_mass_storage()
 //                                  Data Logging
 //====================================================================================
 
-void createDataLoggingFile()
+bool createDataLoggingFile()
 {
     // Create a new file with a number one higher than the highest numbered file
     int highestFileNumber = 0; // Initialize the highest file number to 0
@@ -560,33 +568,52 @@ void createDataLoggingFile()
     sprintf(newFileName, "%d.csv", highestFileNumber + 1);
     if (!sd.exists(newFileName))
     {
-        SdFile newFile;
-        if (newFile.open(newFileName, O_CREAT | O_WRITE))
+        if (dataFile.open(newFileName, O_CREAT | O_WRITE))
         {
             Serial.print("Created new file: ");
             Serial.println(newFileName);
-            newFile.print("Time UTC (H:M:S),Latitude (DD°),Longitude (DD°), Altitude (m), GPS Ground Speed (m/s), GPS Track Over Ground (deg°), Primary Temperature (C°), Humidity (RH%), Battery Percentage (%)");
-            newFile.println();
-            newFile.close();
+            dataFile.print("Time UTC (H:M:S),Latitude (DD°),Longitude (DD°), Altitude (m), GPS Ground Speed (m/s), GPS Track Over Ground (deg°), Primary Temperature (C°), Humidity (RH%), Battery Percentage (%)");
+            dataFile.println();
+            dataFile.sync();
+            return true;
         }
         else
         {
             Serial.println("Error creating new file!");
+            return false;
         }
+    }
+    else
+    {
+        return false;
     }
 }
 // this function is called when the up button is clicked:
 void upButtonClicked()
 {
     // change the mode to 2:
-    mode = 1;
+    if (mode == 1)
+    {
+        mode = 0;
+    }
+    else
+    {
+        mode = 1;
+    }
 }
 
 // this function is called when the down button is clicked:
 void downButtonClicked()
 {
-    // change the mode to 1:
-    mode = 0;
+    // change the mode to 2:
+    if (mode == 0)
+    {
+        mode = 1;
+    }
+    else
+    {
+        mode = 0;
+    }
 }
 
 //====================================================================================
@@ -630,7 +657,13 @@ void setup()
     createDirectionArrow();
     createDataPanel();
     // Create data logging file
-    createDataLoggingFile();
+    fileCreated = createDataLoggingFile();
+
+    if (!fileCreated)
+    {
+        Serial.println("datalogging file failed");
+        return;
+    }
     // draw home page
     tft.fillScreen(TFT_BLACK);
 }
@@ -661,6 +694,7 @@ void loop()
     int packetSize = LoRa.parsePacket();
     if (packetSize)
     {
+        lastRssiCheck = millis();
         // Read and parse the message
         // Read the message and store it in the character array
         for (int i = 0; i < packetSize; i++)
@@ -671,39 +705,46 @@ void loop()
         message[packetSize] = '\0';
         // Log sensor data to SD card
         rssi = LoRa.packetRssi();
-
-        SdFile dataFile;
-        if (dataFile.open(newFileName, FILE_WRITE))
+        currentlyConnected = true;
+        lastRssiCheck = millis();
+        noInterrupts();
+        dataFile.println(message);
+        if (!dataFile.sync())
         {
-            dataFile.println(message);
-            dataFile.close();
+            Serial.println("error writing to sd");
+            return;
         }
-        else
-        {
-            Serial.print("shit");
-        }
+        interrupts();
         Serial.println(message);
         double latitude, longitude;
-        float groundSpeed, trackOverGround, temp, humidity, bat;
-        int hour, min, sec, millisec, altitute;
+        float groundSpeed, trackOverGround, temp, humidity, bat, altitute;
+        int hour, min, sec, millisec;
 
-        sscanf(message, "%d:%d:%d.%d,%f,%f,%d,%f,%f,%f,%f,%f", &hour, &min, &sec, &millisec, &latitude, &longitude, &altitute, &groundSpeed, &trackOverGround, &temp, &humidity, &bat);
+        sscanf(message, "%d:%d:%d.%d,%.6f,%.6f,%.0f,%.1f,%.1f,%.1f,%.1f,%.1f", &hour, &min, &sec, &millisec, &latitude, &longitude, &altitute, &groundSpeed, &trackOverGround, &temp, &humidity, &bat);
+
         testLat = latitude;
         testLong = longitude;
-        testAltitude = (altitute * 3.28084);
+        testAltitude = altitute;
         testTemp = temp;
         testHumdity = humidity;
         vehicleHeading = trackOverGround;
         batteryPercentage = bat;
-        testGroundSpeed = groundSpeed;
+        testGroundSpeed = (groundSpeed * 1.943844);
         testReceive = true;
+    }
+    if (millis() - lastRssiCheck > TIMEOUT)
+    {
+        // if no new RSSI value has been received for TIMEOUT seconds
+        Serial.println("No signal received");
+        lastRssiCheck = millis();
+        currentlyConnected = false;
     }
     // update the state of the up button:
     upButton.tick();
     // update the state of the down button:
     downButton.tick();
     tft.startWrite();
-    drawLayout(batteryPercentage, rssi, testSend, testReceive, vehicleHeading, testGroundSpeed, testTemp, testHumdity);
+    drawLayout(batteryPercentage, rssi, testSend, testReceive, vehicleHeading, testGroundSpeed, testTemp, testHumdity, currentlyConnected);
     // use a switch statement to check the value of the mode variable:
     switch (mode)
     {
@@ -724,5 +765,4 @@ void loop()
     }
     tft.endWrite();
     testReceive = false;
-    Serial.println(rssi);
 }
