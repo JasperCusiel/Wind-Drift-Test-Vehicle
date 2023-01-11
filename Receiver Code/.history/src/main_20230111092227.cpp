@@ -69,7 +69,7 @@ volatile bool loraBufferAvalible;
 // Ublox Neo M9N module
 SFE_UBLOX_GNSS GNSS;
 const int ppsPin = 17;
-int start;
+const int WAKEUP_PIN = 16;
 
 // USB Mass Storage object
 Adafruit_USBD_MSC usb_msc;
@@ -259,6 +259,7 @@ float getAltitude()
 
 void logGPSData()
 {
+  unsigned long start = millis();
   char dataBuffer[100];
   uint8_t hour = GNSS.getHour();
   uint8_t min = GNSS.getMinute();
@@ -294,14 +295,25 @@ void logGPSData()
   if (logCount == 10)
   {
     loraBufferAvalible = false;
-    sprintf(loraBuffer, "%d:%d:%d.%d,%.6f,%.6f,%.0f,%.1f,%.1f,%.1f,%.1f,%.1f", hour, min, sec, millisecs, gpsLatitude, gpsLongitude, altimeterAltitude, gpsGroundSpeed, gpsHeading, externalTemp, externalHumidity, lipoStateOfCharge);
+    sprintf(loraBuffer, "%d:%d:%d.%d,%.6f,%.6f,%d,%.1f,%.1f,%.1f,%.1f,%.1f", hour, min, sec, gpsLatitude, gpsLongitude, altimeterAltitude, gpsGroundSpeed, gpsHeading, externalTemp, externalHumidity, lipoStateOfCharge);
     loraBufferAvalible = true;
     logCount = 0;
   }
+  unsigned long end = millis();
+  Serial.println(end - start);
 }
 void buttonDoubleClick()
 {
   mode = 1;
+  // set GPS to normal mode
+  // GNSS.powerSaveMode(false);
+  Serial.println(GNSS.getPowerSaveMode());
+  // if (!GNSS.powerSaveMode(false))
+  // {
+  //   Serial.println("turning off GPS power save mode failed");
+  //   illuminateErrorLed();
+  //   return;
+  // }
 }
 
 // Function to blink the LED
@@ -452,9 +464,9 @@ void setup()
 
   // When the module is _locked_ to GNSS time, make it generate 10Hz
   timePulseParameters.freqPeriod = 1;            // Set the frequency/period to 1Hz
-  timePulseParameters.pulseLenRatio = 50000;     // Set the period to 50,000 us
+  timePulseParameters.pulseLenRatio = 30000;     // Set the period to 30,000 us
   timePulseParameters.freqPeriodLock = 10;       // Set the frequency/period to 10Hz
-  timePulseParameters.pulseLenRatioLock = 50000; // Set the period to 50,000 us
+  timePulseParameters.pulseLenRatioLock = 30000; // Set the period to 30,000 us
 
   timePulseParameters.flags.bits.active = 1;         // Make sure the active flag is set to enable the time pulse. (Set to 0 to disable.)
   timePulseParameters.flags.bits.lockedOtherSet = 1; // Tell the module to use freqPeriod while locking and freqPeriodLock when locked to GNSS time
@@ -473,6 +485,9 @@ void setup()
   GNSS.setI2COutput(COM_TYPE_UBX);   // Set the I2C port to output UBX only (turn off NMEA noise)
   GNSS.setNavigationFrequency(10);   // Set output to 5 times a second
   GNSS.saveConfiguration();          // Save the current settings to flash and BBR
+  // sleep GPS
+  // GNSS.powerSaveMode();
+
   digitalWrite(LED_BLUE, LOW);
   digitalWrite(LED_RED, LOW);
 }
@@ -573,11 +588,10 @@ void loop()
 
   // data log mode
   case 1:
+
     if ((digitalRead(ppsPin) == HIGH))
     {
-      start = millis();
       logGPSData();
-      Serial.println(millis() - start);
     }
     break;
     // if the mode value is not covered by the case statements, do something else:

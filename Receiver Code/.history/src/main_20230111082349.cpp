@@ -69,7 +69,6 @@ volatile bool loraBufferAvalible;
 // Ublox Neo M9N module
 SFE_UBLOX_GNSS GNSS;
 const int ppsPin = 17;
-int start;
 
 // USB Mass Storage object
 Adafruit_USBD_MSC usb_msc;
@@ -232,7 +231,7 @@ bool createDataLoggingFile()
     {
       Serial.print("Created new file: ");
       Serial.println(newFileName);
-      dataFile.print("Time UTC (H:M:S),Time Valid (0 = Invalid 1 = Valid),Longitude (DD°),Latitude (DD°),GPS Altitude (m),GPS Ground Speed (m/s),GPS Track Over Ground (deg°),Satellites In View, Fix Type (0 = No 2 = 2D Fix 3 = 3D 4 = GNSS 5 = Time Fix), Primary Temperature (C°), Humidity (RH%), Altimeter Temperature (C°), Altitude Relative To Sea Level (1013.25 mBar) (m), Battery Percentage, Battery Discharge Rate (%/h)");
+      dataFile.print("Time UTC (H:M:S),Time Valid (0 = Invalid 1 = Valid),Longitude (DD°),Latitude (DD°),GPS Altitude (m),GPS Ground Speed (m/s),GPS Track Over Ground (deg°),Satellites In View, Fix Type (0 = No Fix 3 = 3D 4 = GNSS 5 = Time Fix), Primary Temperature (C°), Humidity (RH%), Altimeter Temperature (C°), Altitude Relative To Sea Level (1013.25 mBar) (m), Battery Percentage, Battery Discharge Rate (%/h)");
       dataFile.println();
       dataFile.sync();
       return true;
@@ -259,6 +258,7 @@ float getAltitude()
 
 void logGPSData()
 {
+  int time2 = millis();
   char dataBuffer[100];
   uint8_t hour = GNSS.getHour();
   uint8_t min = GNSS.getMinute();
@@ -272,7 +272,6 @@ void logGPSData()
   uint8_t satelitesInView = GNSS.getSIV();                 // Number of satellites used in Nav Solution
   uint8_t fixType = GNSS.getFixType();
   bool timeValid = GNSS.getTimeValid();
-  SHT30.readSample();
   float externalTemp = SHT30.getTemperature();
   float externalHumidity = SHT30.getHumidity();
   float altimeterTemp = altimeter.getTemperature();
@@ -294,7 +293,7 @@ void logGPSData()
   if (logCount == 10)
   {
     loraBufferAvalible = false;
-    sprintf(loraBuffer, "%d:%d:%d.%d,%.6f,%.6f,%.0f,%.1f,%.1f,%.1f,%.1f,%.1f", hour, min, sec, millisecs, gpsLatitude, gpsLongitude, altimeterAltitude, gpsGroundSpeed, gpsHeading, externalTemp, externalHumidity, lipoStateOfCharge);
+    sprintf(loraBuffer, "%d:%d:%d.%d,%.6f,%.6f,%d,%.1f,%.1f,%.1f,%.1f,%.1f", hour, min, sec, gpsLatitude, gpsLongitude, altimeterAltitude, gpsGroundSpeed, gpsHeading, externalTemp, externalHumidity, lipoStateOfCharge);
     loraBufferAvalible = true;
     logCount = 0;
   }
@@ -304,6 +303,18 @@ void buttonDoubleClick()
   mode = 1;
 }
 
+void wakeUp()
+{
+
+  Serial.print("-- waking up module via pin " + String(WAKEUP_PIN));
+  Serial.println(" on your microcontroller --");
+
+  digitalWrite(WAKEUP_PIN, LOW);
+  delay(1000);
+  digitalWrite(WAKEUP_PIN, HIGH);
+  delay(1000);
+  digitalWrite(WAKEUP_PIN, LOW);
+}
 // Function to blink the LED
 void blinkLED()
 {
@@ -426,7 +437,7 @@ void setup()
     return;
   }
 
-  SHT30.setAccuracy(SHTSensor::SHT_ACCURACY_MEDIUM); // only supported by SHT3x
+  SHT30.setAccuracy(SHTSensor::SHT_ACCURACY_HIGH); // only supported by SHT3x
 
   Serial1.begin(38400);
   if (!GNSS.begin(Serial1))
@@ -573,11 +584,10 @@ void loop()
 
   // data log mode
   case 1:
+
     if ((digitalRead(ppsPin) == HIGH))
     {
-      start = millis();
       logGPSData();
-      Serial.println(millis() - start);
     }
     break;
     // if the mode value is not covered by the case statements, do something else:

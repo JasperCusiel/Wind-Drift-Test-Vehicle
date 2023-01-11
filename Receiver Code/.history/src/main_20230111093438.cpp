@@ -281,7 +281,7 @@ void logGPSData()
   float lipoDischargeRate = lipo.getChangeRate();
 
   sprintf(dataBuffer, "%d:%d:%d.%d,%d,%.6f,%.6f,%.2f,%.2f,%.2f,%d,%d,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f", hour, min, sec, millisecs, timeValid, gpsLatitude, gpsLongitude, gpsAltitude, gpsGroundSpeed, gpsHeading, satelitesInView, fixType, externalTemp, externalHumidity, altimeterTemp, altimeterAltitude, lipoStateOfCharge, lipoDischargeRate);
-  noInterrupts();
+  //noInterrupts();
   dataFile.println(dataBuffer);
   if (!dataFile.sync())
   {
@@ -289,12 +289,12 @@ void logGPSData()
     return;
   }
   digitalWrite(LED_GREEN, HIGH);
-  interrupts();
+  //interrupts();
   logCount++;
   if (logCount == 10)
   {
     loraBufferAvalible = false;
-    sprintf(loraBuffer, "%d:%d:%d.%d,%.6f,%.6f,%.0f,%.1f,%.1f,%.1f,%.1f,%.1f", hour, min, sec, millisecs, gpsLatitude, gpsLongitude, altimeterAltitude, gpsGroundSpeed, gpsHeading, externalTemp, externalHumidity, lipoStateOfCharge);
+    sprintf(loraBuffer, "%d:%d:%d.%d,%.6f,%.6f,%d,%.1f,%.1f,%.1f,%.1f,%.1f", hour, min, sec, gpsLatitude, gpsLongitude, altimeterAltitude, gpsGroundSpeed, gpsHeading, externalTemp, externalHumidity, lipoStateOfCharge);
     loraBufferAvalible = true;
     logCount = 0;
   }
@@ -573,6 +573,7 @@ void loop()
 
   // data log mode
   case 1:
+
     if ((digitalRead(ppsPin) == HIGH))
     {
       start = millis();

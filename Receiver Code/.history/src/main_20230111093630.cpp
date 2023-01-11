@@ -294,7 +294,7 @@ void logGPSData()
   if (logCount == 10)
   {
     loraBufferAvalible = false;
-    sprintf(loraBuffer, "%d:%d:%d.%d,%.6f,%.6f,%.0f,%.1f,%.1f,%.1f,%.1f,%.1f", hour, min, sec, millisecs, gpsLatitude, gpsLongitude, altimeterAltitude, gpsGroundSpeed, gpsHeading, externalTemp, externalHumidity, lipoStateOfCharge);
+    sprintf(loraBuffer, "%d:%d:%d.%d,%.6f,%.6f,%d,%.1f,%.1f,%.1f,%.1f,%.1f", hour, min, sec, gpsLatitude, gpsLongitude, altimeterAltitude, gpsGroundSpeed, gpsHeading, externalTemp, externalHumidity, lipoStateOfCharge);
     loraBufferAvalible = true;
     logCount = 0;
   }
@@ -452,7 +452,7 @@ void setup()
 
   // When the module is _locked_ to GNSS time, make it generate 10Hz
   timePulseParameters.freqPeriod = 1;            // Set the frequency/period to 1Hz
-  timePulseParameters.pulseLenRatio = 50000;     // Set the period to 50,000 us
+  timePulseParameters.pulseLenRatio = 20000;     // Set the period to 50,000 us
   timePulseParameters.freqPeriodLock = 10;       // Set the frequency/period to 10Hz
   timePulseParameters.pulseLenRatioLock = 50000; // Set the period to 50,000 us
 
@@ -573,6 +573,7 @@ void loop()
 
   // data log mode
   case 1:
+
     if ((digitalRead(ppsPin) == HIGH))
     {
       start = millis();
