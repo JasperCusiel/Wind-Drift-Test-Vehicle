@@ -14,32 +14,25 @@
 const int LED_GREEN = 26;
 const int LED_RED = 28;
 const int LED_BLUE = 27;
-// Global variables to store the current state and time of the LED
-const int ON_TIME = 250;   // LED on time in milliseconds
-const int OFF_TIME = 2500; // LED off time in milliseconds
 
-// for led blink
-uint8_t ppsLedCount = 0;
-int previousPPSState = LOW; // store the previous state of the pin
+const int ON_TIME = 250;   // Charge LED on time in milliseconds
+const int OFF_TIME = 2500; // Charge LED off time in milliseconds
 
-// Time (in milliseconds) to hold the button to initiate power down (add about 2000 millisec for shut down function)
-const int POWER_DOWN_TIME = 4000;
+uint8_t ppsLedCount = 0;          // Blink Blue LED every 10 pps pulses
+int previousPPSState = LOW;       // store the previous state of the pin
+unsigned long lastUpdateTime = 0; // Timestamp of the last time the LED state was updated
 
-// Timestamp of the last time the LED state was updated
-unsigned long lastUpdateTime = 0;
-
-// Timestamp of the start of the long press
-unsigned long longPressStartTime = 0;
+const int POWER_DOWN_TIME = 4000; // Time (in milliseconds) to hold the button to initiate power down (add about 2000 millisec for shut down function)
 
 unsigned long previousMillis = 0; // Stores the last time the LED was updated
 int ledState = LOW;               // Stores the current state of the LED
-volatile bool powerButtonPressed = false;
 
 // Buttons
 const int powerButtonPin = 21;
 const int bootSelectButtonPin = 22;
 OneButton powerButton(powerButtonPin);
 OneButton bootSelectButton(bootSelectButtonPin);
+unsigned long longPressStartTime = 0; // Timestamp of the start of the long press
 
 // MS5637 Altimeter
 MS5637 altimeter;
@@ -60,47 +53,37 @@ float temp, humidity;
 const int csPin = 19;
 const int resetPin = 18;
 const int irqPin = 20;
-const int MAX_MESSAGE_LENGTH = 100;
-char message[MAX_MESSAGE_LENGTH];
-int logCount = 0;                    // counter to keep track of number of logs made
 const int TIME_BETWEEN_SENDS = 2000; // delay between lora sends
 volatile bool loraBufferAvalible;
+char loraBuffer[100];
 
-// Ublox Neo M9N module
+// Ublox Neo M9N GPS module
 SFE_UBLOX_GNSS GNSS;
 const int ppsPin = 17;
-int start;
 
-// USB Mass Storage object
+// USB Mass Storage Object
 Adafruit_USBD_MSC usb_msc;
-// File system on SD Card
+
+// File System On SD Card
 #define SPI_CLOCK SD_SCK_MHZ(20)
 #define SD_CONFIG SdSpiConfig(PIN_SPI1_SS, SHARED_SPI, SPI_CLOCK, &SPI1)
 SdFat sd;
 SdFile dataFile;
-// string to buffer output
 bool fileCreated = false;
-char loraBuffer[100];
+char newFileName[13]; // For creating new file on boot
 
-// Create a new file with a number one higher than the highest numbered file
-char newFileName[13];
-
-int mode = 0;
+// Program Variables
+int mode = 0; // current vehicle mode
 float batterySOC = 0.0;
-unsigned long previousLogMillis = 0;
-unsigned long currentLogMillis = 0;
-const int DATA_LOG_INTERVAL = 1000; // interval in milliseconds between data logs
-unsigned long lastTime = 0;         // Simple local timer. Limits amount if I2C traffic to u-blox module.
-unsigned long startTime = 0;        // Used to calc the actual update rate.
-unsigned long updateCount = 0;      // Used to calc the actual update rate.
 
 void illuminateErrorLed()
 {
-  Serial.println("error");
+  Serial.println("Error Triggered");
   digitalWrite(LED_RED, HIGH);
   digitalWrite(LED_GREEN, LOW);
   digitalWrite(LED_BLUE, LOW);
 }
+
 //====================================================================================
 //                                    SD card callbacks
 //====================================================================================
@@ -165,18 +148,13 @@ void start_usb_mass_storage()
   usb_msc.begin();
 
   Serial.begin(9600);
-  Serial.println("Adafruit TinyUSB Mass Storage SD Card example");
-
   Serial.print("\nInitializing SD card ... ");
   Serial.print("CS = ");
   Serial.println(PIN_SPI1_SS);
 
   if (!sd.begin(SD_CONFIG))
   {
-    Serial.println("initialization failed. Things to check:");
-    Serial.println("* is a card inserted?");
-    Serial.println("* is your wiring correct?");
-    Serial.println("* did you change the chipSelect pin to match your shield or module?");
+    Serial.println("SD failed to begin");
     illuminateErrorLed();
     while (1)
     {
@@ -226,20 +204,21 @@ bool createDataLoggingFile()
     file.close();
   }
   sprintf(newFileName, "%d.csv", highestFileNumber + 1);
-  if (!sd.exists(newFileName))
+  if (!sd.exists(newFileName)) // create new file
   {
     if (dataFile.open(newFileName, O_CREAT | O_WRITE))
     {
       Serial.print("Created new file: ");
+      Serial.println("Data log file created");
       Serial.println(newFileName);
-      dataFile.print("Time UTC (H:M:S),Time Valid (0 = Invalid 1 = Valid),Longitude (DD°),Latitude (DD°),GPS Altitude (m),GPS Ground Speed (m/s),GPS Track Over Ground (deg°),Satellites In View, Fix Type (0 = No 2 = 2D Fix 3 = 3D 4 = GNSS 5 = Time Fix), Primary Temperature (C°), Humidity (RH%), Altimeter Temperature (C°), Altitude Relative To Sea Level (1013.25 mBar) (m), Battery Percentage, Battery Discharge Rate (%/h)");
+      dataFile.print("Time UTC (H:M:S),Time Valid (0 = Invalid 1 = Valid),Latitude (DD°),Longitude (DD°),GPS Altitude (m),GPS Ground Speed (m/s),GPS Track Over Ground (deg°),Satellites In View, Fix Type (0 = No 2 = 2D Fix 3 = 3D 4 = GNSS 5 = Time Fix), Primary Temperature (C°), Humidity (RH%), Altimeter Temperature (C°), Altitude Relative To Sea Level (1013.25 mBar) (m), Battery Percentage, Battery Discharge Rate (%/h)");
       dataFile.println();
       dataFile.sync();
       return true;
     }
     else
     {
-      Serial.println("Error creating new file!");
+      Serial.println("Error creating new file");
       return false;
     }
   }
@@ -248,6 +227,7 @@ bool createDataLoggingFile()
     return false;
   }
 }
+
 float getAltitude()
 {
   // Get the atmospheric pressure in pascals
@@ -264,47 +244,44 @@ void logGPSData()
   uint8_t min = GNSS.getMinute();
   uint8_t sec = GNSS.getSecond();
   uint16_t millisecs = GNSS.getMillisecond();
-  double gpsLongitude = ((GNSS.getLongitude()) * 1E-7);
-  double gpsLatitude = ((GNSS.getLatitude()) * 1E-7);
-  float gpsAltitude = ((GNSS.getAltitudeMSL()) * 1E-3);
+  float gpsLongitude = ((GNSS.getLongitude()) * 1E-7);
+  float gpsLatitude = ((GNSS.getLatitude()) * 1E-7);
+  float gpsAltitude = ((GNSS.getAltitudeMSL()) * 1E-3);    // Get the current altitude in m according to mean sea level
   float gpsGroundSpeed = ((GNSS.getGroundSpeed()) * 1E-3); // Ground Speed (2-D): m/s
   float gpsHeading = ((GNSS.getHeading()) * 1E-5);         // Heading of motion (2-D): deg
   uint8_t satelitesInView = GNSS.getSIV();                 // Number of satellites used in Nav Solution
   uint8_t fixType = GNSS.getFixType();
   bool timeValid = GNSS.getTimeValid();
-  SHT30.readSample();
+  SHT30.readSample(); // sample temp and humidity sensor
   float externalTemp = SHT30.getTemperature();
   float externalHumidity = SHT30.getHumidity();
   float altimeterTemp = altimeter.getTemperature();
   float altimeterAltitude = getAltitude();
-  float lipoStateOfCharge = lipo.getSOC();
-  float lipoDischargeRate = lipo.getChangeRate();
+  float lipoStateOfCharge = lipo.getSOC();        // get lipo state of charge
+  float lipoDischargeRate = lipo.getChangeRate(); // get battery percentage change per hour
 
-  sprintf(dataBuffer, "%d:%d:%d.%d,%d,%.6f,%.6f,%.2f,%.2f,%.2f,%d,%d,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f", hour, min, sec, millisecs, timeValid, gpsLatitude, gpsLongitude, gpsAltitude, gpsGroundSpeed, gpsHeading, satelitesInView, fixType, externalTemp, externalHumidity, altimeterTemp, altimeterAltitude, lipoStateOfCharge, lipoDischargeRate);
-  noInterrupts();
+  sprintf(dataBuffer, "%d:%d:%d.%d,%d,%f,%f,%.2f,%.2f,%.2f,%d,%d,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f", hour, min, sec, millisecs, timeValid, gpsLatitude, gpsLongitude, gpsAltitude, gpsGroundSpeed, gpsHeading, satelitesInView, fixType, externalTemp, externalHumidity, altimeterTemp, altimeterAltitude, lipoStateOfCharge, lipoDischargeRate);
+  noInterrupts(); // make sure interupts dont block SD save
   dataFile.println(dataBuffer);
   if (!dataFile.sync())
   {
+    Serial.println("Data Failed to save to SD");
     illuminateErrorLed();
     return;
   }
-  digitalWrite(LED_GREEN, HIGH);
+  digitalWrite(LED_GREEN, HIGH); // Indicate SD write was succesfull
   interrupts();
-  logCount++;
-  if (logCount == 10)
-  {
-    loraBufferAvalible = false;
-    sprintf(loraBuffer, "%d:%d:%d.%d,%.6f,%.6f,%.0f,%.1f,%.1f,%.1f,%.1f,%.1f", hour, min, sec, millisecs, gpsLatitude, gpsLongitude, altimeterAltitude, gpsGroundSpeed, gpsHeading, externalTemp, externalHumidity, lipoStateOfCharge);
-    loraBufferAvalible = true;
-    logCount = 0;
-  }
-}
-void buttonDoubleClick()
-{
-  mode = 1;
+  loraBufferAvalible = false; // tell other core the lora buffer is not avalible to be read from
+  sprintf(loraBuffer, "%d:%d:%d.%d,%d,%f,%f,%.1f,%.1f,%.1f,%.1f,%.1f,%.1f", hour, min, sec, millisecs, fixType, gpsLatitude, gpsLongitude, altimeterAltitude, gpsGroundSpeed, gpsHeading, externalTemp, externalHumidity, lipoStateOfCharge);
+  loraBufferAvalible = true;
 }
 
-// Function to blink the LED
+void buttonDoubleClick()
+{
+  mode = 1; // Change to data log mode when funtion button double pressed
+}
+
+// Function to blink the LED in the charging mode
 void blinkLED()
 {
   // Get the current time
@@ -323,7 +300,10 @@ void blinkLED()
 
 void slowPowerDown()
 {
-  dataFile.close();
+  dataFile.close(); // close the data log file for good measure
+  digitalWrite(LED_GREEN, HIGH);
+  digitalWrite(LED_BLUE, HIGH);
+  digitalWrite(LED_RED, HIGH);
   noInterrupts();
   pinMode(powerButtonPin, OUTPUT);
   digitalWrite(powerButtonPin, LOW);
@@ -332,10 +312,8 @@ void slowPowerDown()
   }
 }
 
-// This function will be called repeatedly while the button is held
 void handleLongPress()
 {
-  powerButtonPressed = true;
   // If this is the first time the function is called, record the start time
   if (longPressStartTime == 0)
   {
@@ -349,16 +327,14 @@ void handleLongPress()
   }
 }
 
-// This function will be called when the button is released after a long press
 void handleLongPressStop()
 {
   // Reset the long press start time
   longPressStartTime = 0;
-  powerButtonPressed = false;
 }
 
-boolean runEvery(unsigned long interval)
-{
+bool runEvery(unsigned long interval)
+{ // returns true if its been longer than the specified interval
   static unsigned long previousMillis = 0;
   unsigned long currentMillis = millis();
   if (currentMillis - previousMillis >= interval)
@@ -375,7 +351,7 @@ boolean runEvery(unsigned long interval)
 
 void setup()
 {
-  rp2040.idleOtherCore();
+  rp2040.idleOtherCore(); // don't allow other core to interfere with checking which mode to boot into
   pinMode(LED_BLUE, OUTPUT);
   pinMode(LED_RED, OUTPUT);
   pinMode(LED_GREEN, OUTPUT);
@@ -393,8 +369,6 @@ void setup()
   digitalWrite(LED_BLUE, HIGH);
   digitalWrite(LED_RED, HIGH);
   rp2040.resumeOtherCore();
-
-  Serial.begin(9600);
   Wire1.begin();
   Wire1.setClock(400000);
 
@@ -402,7 +376,7 @@ void setup()
   if (!altimeter.begin(Wire1))
   {
     illuminateErrorLed();
-    Serial.println("MS5637 sensor did not respond. Please check wiring.");
+    Serial.println("Altimeter did not respond");
     return;
   }
 
@@ -412,26 +386,26 @@ void setup()
   if (!lipo.begin(Wire1)) // Connect to the MAX17043 using non-standard wire port
   {
     illuminateErrorLed();
-    Serial.println(F("MAX17048 not detected."));
+    Serial.println(F("Lipo fuel gauge not detected"));
     return;
   }
-
-  lipo.setThreshold(20);
-
+  lipo.setThreshold(10);
+  lipo.setVALRTMax((float)4.2); // Set high voltage threshold (Volts)
+  lipo.setVALRTMin((float)3.2); // Set low voltage threshold (Volts)
   // SHT30 Temperature and Humidity Sensor Initalization
   if (!SHT30.init(Wire1))
   {
     illuminateErrorLed();
-    Serial.print("SHT30 error");
+    Serial.print("SHT30 failed to start");
     return;
   }
 
-  SHT30.setAccuracy(SHTSensor::SHT_ACCURACY_MEDIUM); // only supported by SHT3x
+  SHT30.setAccuracy(SHTSensor::SHT_ACCURACY_MEDIUM);
 
   Serial1.begin(38400);
   if (!GNSS.begin(Serial1))
   {
-    Serial.println("gps not started");
+    Serial.println("GPS failed to start");
     return;
   }
 
@@ -447,9 +421,6 @@ void setup()
 
   timePulseParameters.tpIdx = 0; // Select the TIMEPULSE pin
 
-  // We can configure the time pulse pin to produce a defined frequency or period
-  // Here is how to set the frequency:
-
   // When the module is _locked_ to GNSS time, make it generate 10Hz
   timePulseParameters.freqPeriod = 1;            // Set the frequency/period to 1Hz
   timePulseParameters.pulseLenRatio = 50000;     // Set the period to 50,000 us
@@ -462,16 +433,15 @@ void setup()
   timePulseParameters.flags.bits.isLength = 1;       // Tell the module that pulseLenRatio is a length (in us) - not a duty cycle
   timePulseParameters.flags.bits.polarity = 1;       // Tell the module that we want the rising edge at the top of second. (Set to 0 for falling edge.)
 
-  // Now set the time pulse parameters
   if (GNSS.setTimePulseParameters(&timePulseParameters) == false)
   {
-    Serial.println("setTimePulseParameters failed!");
+    Serial.println("Setting Time Pulse Parameters failed");
     return;
   }
 
   GNSS.setUART1Output(COM_TYPE_UBX); // Set the UART port to output UBX only
   GNSS.setI2COutput(COM_TYPE_UBX);   // Set the I2C port to output UBX only (turn off NMEA noise)
-  GNSS.setNavigationFrequency(10);   // Set output to 5 times a second
+  GNSS.setNavigationFrequency(10);   // Set output to 10 times a second
   GNSS.saveConfiguration();          // Save the current settings to flash and BBR
   digitalWrite(LED_BLUE, LOW);
   digitalWrite(LED_RED, LOW);
@@ -484,18 +454,14 @@ void setup1()
   if (!LoRa.begin(915E6))
   {
     illuminateErrorLed();
-    Serial.println("LoRa init failed. Check your connections.");
+    Serial.println("LoRa failed to start");
     return;
   }
 
   if (!sd.begin(SD_CONFIG))
   {
-    Serial.println("initialization failed. Things to check:");
-    Serial.println("* is a card inserted?");
-    Serial.println("* is your wiring correct?");
-    Serial.println("* did you change the chipSelect pin to match your shield or module?");
     illuminateErrorLed();
-    Serial.println("SD failed");
+    Serial.println("SD failed to start");
     return;
   }
 
@@ -504,7 +470,7 @@ void setup1()
   if (!fileCreated)
   {
     illuminateErrorLed();
-    Serial.println("datalogging file failed");
+    Serial.println("Creating datalogging file failed");
     return;
   }
 
@@ -523,9 +489,6 @@ void loop1()
       {
         return;
       }
-      // Serial.print("Sending packet non-blocking: ");
-      // Serial.println(loraBuffer);
-      //  send in async / non-blocking mode
       LoRa.beginPacket();
       LoRa.write((const uint8_t *)loraBuffer, strlen(loraBuffer));
       LoRa.endPacket(true); // true = async / non-blocking mode
@@ -537,7 +500,7 @@ void loop1()
       {
         if ((ppsLedCount++) == 10)
         {
-          digitalWrite(LED_BLUE, HIGH);
+          digitalWrite(LED_BLUE, HIGH); // blink every 10 pps pulses
           ppsLedCount = 0;
         }
         else
@@ -557,17 +520,14 @@ void loop()
   switch (mode)
   {
   case 0:
-    if (!powerButtonPressed)
+    batterySOC = lipo.getSOC();
+    if (batterySOC < 98) // consider 98% or higher fully charged
     {
-      batterySOC = lipo.getSOC();
-      if (batterySOC < 100)
-      {
-        blinkLED();
-      }
-      else
-      {
-        digitalWrite(LED_BLUE, HIGH);
-      }
+      blinkLED();
+    }
+    else
+    {
+      digitalWrite(LED_BLUE, HIGH);
     }
     break;
 
@@ -575,12 +535,9 @@ void loop()
   case 1:
     if ((digitalRead(ppsPin) == HIGH))
     {
-      start = millis();
       logGPSData();
-      Serial.println(millis() - start);
     }
     break;
-    // if the mode value is not covered by the case statements, do something else:
   default:
     mode = 0;
     break;
