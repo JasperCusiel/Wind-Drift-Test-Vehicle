@@ -86,12 +86,12 @@ char newFileName[13]; // For storing new file name created on boot
 int mode = 0; // Current vehicle mode: 0 = charging, 1 = data logging
 float batterySOC = 0.0;
 
-/**
- * @brief This function turns off all of the other led indicator led's and only illuminates the red led.
- * Message is printed to the serial monitor indicating the function triggered
- */
 void illuminateErrorLed()
 {
+  /**
+   * @brief This function turns off all of the other led indicator led's and only illuminates the red led.
+   * Message is printed to the serial monitor indicating the function triggered
+   */
   Serial.println("Error Triggered");
   digitalWrite(LED_RED, HIGH);
   digitalWrite(LED_GREEN, LOW);
@@ -102,12 +102,12 @@ void illuminateErrorLed()
 //                                    SD card callbacks
 //====================================================================================
 
-/**
- * @brief Callback invoked when received READ10 command.
- * Copy disk's data to buffer (up to bufsize) and return number of copied bytes (must be multiple of block size)
- */
 int32_t msc_read_cb(uint32_t lba, void *buffer, uint32_t bufsize)
 {
+  /**
+   * @brief Callback invoked when received READ10 command.
+   * Copy disk's data to buffer (up to bufsize) and return number of copied bytes (must be multiple of block size)
+   */
   bool rc;
 
 #if SD_FAT_VERSION >= 20000
@@ -119,12 +119,12 @@ int32_t msc_read_cb(uint32_t lba, void *buffer, uint32_t bufsize)
   return rc ? bufsize : -1;
 }
 
-/**
- * @brief Callback invoked when received WRITE10 command.
- * Process data in buffer to disk's storage and return number of written bytes (must be multiple of block size)
- */
 int32_t msc_write_cb(uint32_t lba, uint8_t *buffer, uint32_t bufsize)
 {
+  /**
+   * @brief Callback invoked when received WRITE10 command.
+   * Process data in buffer to disk's storage and return number of written bytes (must be multiple of block size)
+   */
   bool rc;
 
 #if SD_FAT_VERSION >= 20000
@@ -136,12 +136,12 @@ int32_t msc_write_cb(uint32_t lba, uint8_t *buffer, uint32_t bufsize)
   return rc ? bufsize : -1;
 }
 
-/**
- * @brief Callback invoked when WRITE10 command is completed (status received and accepted by host).
- * Used to flush any pending cache.
- */
 void msc_flush_cb(void)
 {
+  /**
+   * @brief Callback invoked when WRITE10 command is completed (status received and accepted by host).
+   * Used to flush any pending cache.
+   */
 #if SD_FAT_VERSION >= 20000
   sd.card()->syncDevice();
 #else
@@ -152,12 +152,12 @@ void msc_flush_cb(void)
   sd.cacheClear();
 }
 
-/**
- * @brief This function starts the vehicle as a USB thumb drive so that the connected computer can access the contents on the SD card.
- * The vehicle must be rebooted via power cycle to get stop emulating the thumb drive.
- */
 void start_usb_mass_storage()
 {
+  /**
+   * @brief This function starts the vehicle as a USB thumb drive so that the connected computer can access the contents on the SD card.
+   * The vehicle must be rebooted via power cycle to get stop emulating the thumb drive.
+   */
   usb_msc.setID("Adafruit", "SD Card", "1.0");
   usb_msc.setReadWriteCallback(msc_read_cb, msc_write_cb, msc_flush_cb);
   usb_msc.setUnitReady(false); // Still initialize MSC but tell usb stack that MSC is not ready to read/write
@@ -190,13 +190,14 @@ void start_usb_mass_storage()
 //====================================================================================
 //                                  Data Logging
 //====================================================================================
-/**
- * @brief This function creates a newfile with the named one digit higher than the highest numbered file
- * @return true if creating new file was succesfull
- * @return false if creating new file failed
- */
+
 bool createDataLoggingFile()
 {
+  /**
+   * @brief This function creates a newfile with the named one digit higher than the highest numbered file
+   * @return true if creating new file was succesfull
+   * @return false if creating new file failed
+   */
   int highestFileNumber = 0;
 
   SdFile root;
@@ -241,22 +242,22 @@ bool createDataLoggingFile()
   }
 }
 
-/**
- * @brief Samples the altimeter and calculates the altitude above sea level using the barometric formula and the standard SEA_LEVEL_PRESSURE
- * @return altitude above sea level (float)
- */
 float getAltitude()
 {
+  /**
+   * @brief Samples the altimeter and calculates the altitude above sea level using the barometric formula and the standard SEA_LEVEL_PRESSURE
+   * @return altitude above sea level (float)
+   */
   float pressure = (altimeter.getPressure() * 100);
   float altitude = (1 - pow(pressure / SEA_LEVEL_PRESSURE, 0.1903)) * 44330.8;
   return altitude;
 }
 
-/**
- * @brief This function samples the GPS and sensors and then logs that data to the SD card
- */
 void logGPSData()
 {
+  /**
+   * @brief This function samples the GPS and sensors and then logs that data to the SD card
+   */
   char dataBuffer[100]; // Buffer to hold the sampled data
   // Get time stamp
   uint8_t hour = GNSS.getHour();
@@ -300,19 +301,19 @@ void logGPSData()
   loraBufferAvalible = true;
 }
 
-/**
- * @brief Function is called when white function button is double clicked
- */
 void buttonDoubleClick()
 {
+  /**
+   * @brief Function is called when white function button is double clicked
+   */
   mode = 1; // Change to data logging mode
 }
 
-/**
- * @brief Function to blink the blue led in the charging mode. Called if the battery is not fully charged
- */
 void blinkLED()
 {
+  /**
+   * @brief Function to blink the blue led in the charging mode. Called if the battery is not fully charged
+   */
   unsigned long currentMillis = millis();
   if (currentMillis - previousMillis > (ledState ? ON_TIME : OFF_TIME))
   {
@@ -322,12 +323,12 @@ void blinkLED()
   }
 }
 
-/**
- * @brief This function closes the data logging file, turns the led indicator white
- * and then pulls the power button pin LOW which after ~2s cuts power to the board
- */
 void slowPowerDown()
 {
+  /**
+   * @brief This function closes the data logging file, turns the led indicator white
+   * and then pulls the power button pin LOW which after ~2s cuts power to the board
+   */
   dataFile.close(); // close the data log file for good measure
   digitalWrite(LED_GREEN, HIGH);
   digitalWrite(LED_BLUE, HIGH);
@@ -340,12 +341,12 @@ void slowPowerDown()
   }
 }
 
-/**
- * @brief This function is called while the power button is being pressed and checks if the button has been pressed for longer than the POWER_DOWN_TIME.
- * Calls the slowPowerDown() function if the power button has been held for long enough.
- */
 void handleLongPress()
 {
+  /**
+   * @brief This function is called while the power button is being pressed and checks if the button has been pressed for longer than the POWER_DOWN_TIME.
+   * Calls the slowPowerDown() function if the power button has been held for long enough.
+   */
   if (longPressStartTime == 0) // If this is the first time the function is called, record the start time
   {
     longPressStartTime = millis();
@@ -357,23 +358,23 @@ void handleLongPress()
   }
 }
 
-/**
- * @brief This function is called when the power button is released and resets the longPressStart time to zero.
- */
 void handleLongPressStop()
 {
+  /**
+   * @brief This function is called when the power button is released and resets the longPressStart time to zero.
+   */
   longPressStartTime = 0;
 }
 
-/**
- * @brief This function returns true if it has been longer than the interval and false if it hasn't.
- * Used in the main loop to check if its time to send fresh LoRa data
- * @param interval (milliseconds)
- * @return true
- * @return false
- */
 bool runEvery(unsigned long interval)
 {
+  /**
+   * @brief This function returns true if it has been longer than the interval and false if it hasn't.
+   * Used in the main loop to check if its time to send fresh LoRa data
+   * @param interval (milliseconds)
+   * @return true
+   * @return false
+   */
   static unsigned long previousMillis = 0;
   unsigned long currentMillis = millis();
   if (currentMillis - previousMillis >= interval)
@@ -520,10 +521,7 @@ void setup1()
   powerButton.attachDuringLongPress(handleLongPress);
   powerButton.attachLongPressStop(handleLongPressStop);
 }
-/**
- * @brief Loop 1 handles blinking the blue led when the PPS (pulse per second) pin pulses,
- * sending data via LoRa and checking the power and function button states.
- */
+
 void loop1()
 {
   if (mode == 1) // If in data logging mode
