@@ -1,6 +1,6 @@
 # Wind Drift Test Vehicle
 
-This project is based around building data collection device that can be dropped out of a helicopter and GPS position, altitude, temperature and humidity while relaying this information back to a ground station. The vehicle samples GPS, altitude, temperature and humidity at 10Hz while the GPS has a 3D fix and 1Hz while trying to obtain a fix. This data is logged to the internal SD card and relayed over the LoRa radio to the ground station a 0.5Hz. The ground station has an inbuilt SD card where it logs all of the incoming data while displaying this reviced information to the user. These systems operate independantly so the vehicle always logs data regardless of its connection status to the ground station.
+This project is based around building data collection device that can be dropped out of a helicopter and record GPS position, altitude, temperature and humidity while relaying this information back to a ground station. The vehicle samples GPS, altitude, temperature and humidity at 10Hz while the GPS has a 3D fix and 1Hz while trying to obtain a fix. This data is logged to the internal SD card and relayed over the LoRa radio to the ground station a 0.5Hz. The ground station has an inbuilt SD card where it logs all of the incoming data while displaying this reviced information to the user. These systems operate independantly so the vehicle always logs data regardless of its connection status to the ground station.
 
 Test Vehicle | Ground Station
 ------------ | -------------
